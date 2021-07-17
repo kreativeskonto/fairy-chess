@@ -152,7 +152,7 @@ class Piece:
 
         elif self.kind == PIECE_GRYPHON:
             move1, cap1 = board.ray(self.side, to_square((self.x - 1, self.y)), [DIR_NORTH, DIR_SOUTH]) if self.x > 0 else (set(), set())
-            move2, cap2 = board.ray(self.side, to_square((self.x + 1, self.y)), [DIR_NORTH, DIR_EAST]) if self.x < board.size else (set(), set())
+            move2, cap2 = board.ray(self.side, to_square((self.x + 1, self.y)), [DIR_NORTH, DIR_SOUTH]) if self.x < board.size else (set(), set())
             move3, cap3 = board.ray(self.side, to_square((self.x, self.y - 1)), [DIR_WEST, DIR_EAST]) if self.y > 0 else (set(), set())
             move4, cap4 = board.ray(self.side, to_square((self.x, self.y + 1)), [DIR_WEST, DIR_EAST]) if self.y < board.size else (set(), set())
             return move1.union(move2).union(move3).union(move4), cap1.union(cap2).union(cap3).union(cap4)
