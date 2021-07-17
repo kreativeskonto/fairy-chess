@@ -25,8 +25,8 @@ class Board:
             if line == "\n":
                 side = 2
                 continue
-            short_kind, square = line.strip().split()
-            self.create_piece(side, eval("PIECE_" + short_kind), int(square))
+            kind_name, square = line.strip().split()
+            self.create_piece(side, Kind[kind_name], int(square))
 
     def printout(self):
         lines = []
@@ -116,7 +116,7 @@ class Board:
         moves = self.possible_moves(from_sq)
         if moves is None:
             return False
-        moves = moves[0].union(moves[1])
+        moves = moves[0] | moves[1]
         piece = self.squares[from_sq]
         if to_sq in moves:
             piece.move(to_sq)

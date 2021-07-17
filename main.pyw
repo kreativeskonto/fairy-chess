@@ -4,7 +4,7 @@ import pygame
 from pygame import Color, Rect
 
 from board import Board
-from pieces import *
+from pieces import Kind
 from util import BOARD_SIZE, to_square
 
 
@@ -27,9 +27,9 @@ class Game:
         pygame.init()
         pygame.display.set_caption('Fairy chess')
 
+        self.size = BOARD_SIZE
         self.theme = THEMES['Chess.com']
         self.padding = 20
-        self.size = BOARD_SIZE
 
         self.surface = pygame.display.set_mode((800, 670), flags=pygame.RESIZABLE)
 
@@ -37,9 +37,9 @@ class Game:
         for path, _, files in os.walk('pieces'):
             for file in files:
                 filepath = os.path.join(path, file)
-                stem, _ = os.path.splitext(file)
+                kind = Kind[os.path.splitext(file)[0].upper()]
                 side = 1 if 'white' in path else 2
-                self.textures[str(side) + stem] = pygame.image.load(filepath).convert_alpha()
+                self.textures[(side, kind)] = pygame.image.load(filepath).convert_alpha()
 
         self.board_rect: Rect = None
         self.square_rect: Rect = None
@@ -118,7 +118,7 @@ class Game:
 
     def draw_piece(self, piece, where):
         try:
-            bitmap = self.scaled[str(piece.side) + piece.kind]
+            bitmap = self.scaled[piece.side, piece.kind]
             self.surface.blit(bitmap, where)
         except KeyError:
             pass
