@@ -200,7 +200,7 @@ class NetworkThread(Thread):
             print(f"  {local_ip} in the local network.")
             print(f"  {public_ip} in the internet.")
 
-            self.socket.bind(("localhost", PORT))
+            self.socket.bind((local_ip, PORT))
             self.socket.listen(1)
 
             self.socket, (peer_ip, _) = self.socket.accept()
