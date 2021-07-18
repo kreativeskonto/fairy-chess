@@ -165,7 +165,7 @@ class Board:
         for piece in self.squares:
             if piece is not None:
                 if piece.side == side:
-                    if piece.move_and_capture_squares() != (set(), set()):
+                    if piece.move_and_capture_squares(self) != (set(), set()):
                         return 0
         if self.in_check(side):
             return 2
