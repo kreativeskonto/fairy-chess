@@ -8,6 +8,9 @@ class Board:
         self.squares = [None] * (self.size ** 2)
         self.turn = turn
 
+        self.en_passant = None
+        self.moves = set()
+
     def clear(self):
         self.squares = [None] * (self.size ** 2)
 
@@ -112,6 +115,18 @@ class Board:
             return None
         return piece.move_and_capture_squares(self)
 
+    def all_possible_moves(self, side=0):
+        if side == 0:
+            side = self.turn
+        move_set, cap_set = set(), set()
+        for piece in self.squares:
+            if piece is not None:
+                if piece.side == side:
+                    move, cap = piece.move_and_capture_squares()
+                    move_set |= {(piece.sq, to_sq) for to_sq in move}
+                    cap_set |= {(piece.sq, to_sq) for to_sq in cap}
+        return move_set, cap_set
+
     def move(self, from_sq, to_sq):
         moves = self.possible_moves(from_sq)
         if moves is None:
@@ -134,6 +149,31 @@ class Board:
                 self.turn = 3 - self.turn
                 self.printout()
         print("GAME OVER")
+
+    def in_check(self, side=0):
+        if side == 0:
+            side = self.turn
+        for piece in self.squares:
+            if piece is not None:
+                if piece.side != side:
+                    _, captures = piece.move_and_capture_squares(self, check_check=False)
+                    for cap in captures:
+                        if self.squares[cap].kind == Kind.KING:
+                            return True
+        return False
+
+    def check_move_for_check(self, from_sq, to_sq):
+        piece, target = self.squares[from_sq], self.squares[to_sq]
+        piece.move(to_sq)
+        self.squares[to_sq] = piece
+        self.squares[from_sq] = None
+        if self.in_check(piece.side):
+            self.squares[from_sq], self.squares[to_sq] = piece, target
+            piece.move(from_sq)
+            return False
+        self.squares[from_sq], self.squares[to_sq] = piece, target
+        piece.move(from_sq)
+        return True
 
 
 if __name__ == "__main__":
