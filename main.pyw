@@ -1,5 +1,13 @@
 import sys
 import os
+import socket
+
+from queue import Empty, Queue
+from threading import Thread
+from urllib import request
+
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
+
 import pygame
 from pygame import Color, Rect
 
@@ -7,38 +15,38 @@ from board import Board
 from pieces import Kind
 from util import BOARD_SIZE, to_square
 
-
+PORT = 5398
 BLACK = Color(0, 0, 0)
 WHITE = Color(255, 255, 255)
 SMOOTH = False
 THEMES = {
-    'Chess.com': {
-        'background': Color('#333333'),
-        'white': Color('#eeeed2'),
-        'black': Color('#769656'),
-        'move': Color('#baca2b'),
-        'capture': Color('#ec7e6a'),
+    "Chess.com": {
+        "background": Color("#333333"),
+        "white": Color("#eeeed2"),
+        "black": Color("#769656"),
+        "move": Color("#baca2b"),
+        "capture": Color("#ec7e6a"),
     }
 }
 
 
 class Game:
-    def __init__(self):
+    def __init__(self, host):
         pygame.init()
-        pygame.display.set_caption('Fairy chess')
+        pygame.display.set_caption("Fairy chess")
 
         self.size = BOARD_SIZE
-        self.theme = THEMES['Chess.com']
+        self.theme = THEMES["Chess.com"]
         self.padding = 20
 
         self.surface = pygame.display.set_mode((800, 670), flags=pygame.RESIZABLE)
 
         self.textures = {}
-        for path, _, files in os.walk('pieces'):
+        for path, _, files in os.walk("pieces"):
             for file in files:
                 filepath = os.path.join(path, file)
                 kind = Kind[os.path.splitext(file)[0].upper()]
-                side = 1 if 'white' in path else 2
+                side = 1 if "white" in path else 2
                 self.textures[(side, kind)] = pygame.image.load(filepath).convert_alpha()
 
         self.board_rect: Rect = None
@@ -48,14 +56,31 @@ class Game:
 
         self.board = Board()
         self.board.setup_file("default_moab.pos")
+        self.side = 1 if host else 2
 
         self.dragged = None
         self.moves = []
         self.captures = []
 
+        self.incoming = Queue()
+        self.outgoing = Queue()
+
+        self.network = NetworkThread(host, self.incoming, self.outgoing)
+        self.network.daemon = True
+        self.network.start()
+
     def run(self):
         while True:
-            event = pygame.event.wait()
+            try:
+                item = self.incoming.get(block=False)
+                from_sq, to_sq = item
+                feedback = self.board.move(from_sq, to_sq)
+                if feedback in ("Stalemate", "Checkmate"):
+                    print(feedback)
+            except Empty:
+                pass
+
+            event = pygame.event.wait(50)
             self.update(event)
 
             for event in pygame.event.get():
@@ -74,36 +99,35 @@ class Game:
             sq = self.hit_test()
             if sq is not None:
                 piece = self.board.squares[sq]
-                if piece:
+                if piece and piece.side == self.side:
                     self.dragged = piece
                     self.moves, self.captures = piece.move_and_capture_squares(self.board, check_side=True)
 
-        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            if self.dragged:
-                target = self.hit_test()
-                if target is not None:
-                    feedback = self.board.move(self.dragged.square, target)
-                    if feedback == "Stalemate":
-                        pass
-                    if feedback == "Checkmate":
-                        pass
+        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1 and self.dragged:
+            target = self.hit_test()
+            if target is not None:
+                item = (self.dragged.square, target)
+                feedback = self.board.move(*item)
+                self.outgoing.put(item)
+                if feedback in ("Stalemate", "Checkmate"):
+                    print(feedback)
 
-                self.dragged = None
+            self.dragged = None
 
     def draw(self):
-        self.surface.fill(self.theme['background'])
+        self.surface.fill(self.theme["background"])
 
         for x in range(self.size):
             for y in range(self.size):
                 sq = to_square((x, y))
                 if self.dragged and sq in self.moves:
-                    key = 'move'
+                    key = "move"
                 elif self.dragged and sq in self.captures:
-                    key = 'capture'
+                    key = "capture"
                 elif (x + y) % 2:
-                    key = 'white'
+                    key = "white"
                 else:
-                    key = 'black'
+                    key = "black"
 
                 square = self.square_rect.move(x * self.square_rect.width, -y * self.square_rect.height)
                 pygame.draw.rect(self.surface, self.theme[key], square)
@@ -155,5 +179,59 @@ class Game:
             return to_square((x, y))
 
 
-if __name__ == '__main__':
-    Game().run()
+class NetworkThread(Thread):
+    def __init__(self, host, incoming, outgoing):
+        Thread.__init__(self)
+        self.host = host
+        self.incoming = incoming
+        self.outgoing = outgoing
+
+    def run(self):
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+        if self.host:
+            # Find out own local and public IP
+            local_ip = socket.gethostbyname(socket.gethostname())
+            public_ip = request.urlopen("https://api.ipify.org").read().decode()
+
+            print(f"If you want to play over the internet, you need to forward port {PORT}.")
+            print(f"Your IP address is:")
+            print(f"  {local_ip} in the local network.")
+            print(f"  {public_ip} in the internet.")
+
+            self.socket.bind(("localhost", PORT))
+            self.socket.listen(1)
+
+            self.socket, (peer_ip, _) = self.socket.accept()
+
+        else:
+            peer_ip = input("Please enter the IP you want to connect to: ")
+            print(f"Connecting to {peer_ip}:{PORT}")
+            self.socket.connect((peer_ip, PORT))
+
+        print(f"Connected with {peer_ip}")
+
+        self.socket.settimeout(0.1)
+
+        while True:
+            try:
+                data = self.socket.recv(2)
+                assert len(data) == 2
+                item = tuple(data)
+                self.incoming.put(item)
+            except socket.timeout:
+                pass
+
+            try:
+                item = self.outgoing.get(block=False)
+                assert len(item) == 2
+                self.socket.send(bytes(item))
+            except Empty:
+                pass
+
+
+if __name__ == "__main__":
+    mode = input("Do you want to host (H) or connect (C) ").upper()
+    host = mode == "H"
+    Game(host).run()
