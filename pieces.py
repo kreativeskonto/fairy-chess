@@ -52,7 +52,10 @@ class Piece:
         self.square = square
         self.x, self.y = to_coords(square)
 
-    def move_and_capture_squares(self, board, check_check=True):
+    def move_and_capture_squares(self, board, check_check=True, check_side=False):
+        if check_side and self.side != board.turn:
+            return set(), set()
+
         if self.kind == Kind.ROOK:
             moves, captures = board.ray(self.side, self.square, DIRS_ROOK)
 

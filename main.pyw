@@ -76,13 +76,17 @@ class Game:
                 piece = self.board.squares[sq]
                 if piece:
                     self.dragged = piece
-                    self.moves, self.captures = piece.move_and_capture_squares(self.board)
+                    self.moves, self.captures = piece.move_and_capture_squares(self.board, check_side=True)
 
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             if self.dragged:
                 target = self.hit_test()
                 if target is not None:
-                    self.board.move(self.dragged.square, target)
+                    feedback = self.board.move(self.dragged.square, target)
+                    if feedback == "Stalemate":
+                        pass
+                    if feedback == "Checkmate":
+                        pass
 
                 self.dragged = None
 

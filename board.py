@@ -37,7 +37,7 @@ class Board:
         for y in range(self.size):
             line = ""
             for x in range(self.size):
-                sq = to_square((x,y))
+                sq = to_square((x, y))
                 piece = self.squares[sq]
                 if piece is None:
                     char = "  "
@@ -107,48 +107,32 @@ class Board:
                     break
         return move_squares, capture_squares
 
-    def possible_moves(self, square=0, xy=None):
+    def possible_moves(self, square=0, xy=None, check_side=False):
         if xy is not None:
             square = to_square(xy)
         piece = self.squares[square]
         if piece is None:
             return None
-        return piece.move_and_capture_squares(self)
-
-    def all_possible_moves(self, side=0):
-        if side == 0:
-            side = self.turn
-        move_set, cap_set = set(), set()
-        for piece in self.squares:
-            if piece is not None:
-                if piece.side == side:
-                    move, cap = piece.move_and_capture_squares()
-                    move_set |= {(piece.sq, to_sq) for to_sq in move}
-                    cap_set |= {(piece.sq, to_sq) for to_sq in cap}
-        return move_set, cap_set
+        return piece.move_and_capture_squares(self, check_side=check_side)
 
     def move(self, from_sq, to_sq):
-        moves = self.possible_moves(from_sq)
+        moves = self.possible_moves(from_sq, check_side=True)
         if moves is None:
-            return False
+            return "Invalid"
         moves = moves[0] | moves[1]
         piece = self.squares[from_sq]
         if to_sq in moves:
             piece.move(to_sq)
             self.squares[to_sq] = piece
             self.squares[from_sq] = None
-            return True
-        return False
-
-    def play_game(self):
-        self.printout()
-        while any(self.squares):
-            move_input = input("From where to where? > ")
-            from_sq, to_sq = (int(num) for num in move_input.strip().split())
-            if self.move(from_sq, to_sq):
-                self.turn = 3 - self.turn
-                self.printout()
-        print("GAME OVER")
+            self.turn = 3 - self.turn
+            mate = self.check_mate()
+            if mate == 1:
+                return "Stalemate"
+            if mate == 2:
+                return "Checkmate"
+            return "Valid"
+        return "Invalid"
 
     def in_check(self, side=0):
         if side == 0:
@@ -175,8 +159,19 @@ class Board:
         piece.move(from_sq)
         return True
 
+    def check_mate(self, side=0):  # 0 = no mate, 1 = stalemate, 2 = checkmate
+        if side == 0:
+            side = self.turn
+        for piece in self.squares:
+            if piece is not None:
+                if piece.side == side:
+                    if piece.move_and_capture_squares() != (set(), set()):
+                        return 0
+        if self.in_check(side):
+            return 2
+        return 1
+
 
 if __name__ == "__main__":
     board = Board()
     board.setup_file("default_moab.pos")
-    board.play_game()
