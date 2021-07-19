@@ -26,6 +26,7 @@ THEMES = {
         "black": Color("#769656"),
         "move": Color("#baca2b"),
         "capture": Color("#ec7e6a"),
+        "promotion": Color("#00d5ff"),
     }
 }
 
@@ -52,6 +53,7 @@ class Game:
         self.board_rect: Rect = None
         self.square_rect: Rect = None
         self.scaled = {}
+        self.promo: pygame.Surface = None
         self.resize()
 
         self.board = Board()
@@ -61,6 +63,7 @@ class Game:
         self.dragged = None
         self.moves = []
         self.captures = []
+        self.promotions = []
 
         self.incoming = Queue()
         self.outgoing = Queue()
@@ -105,6 +108,7 @@ class Game:
                 if piece and (self.mode == "L" or piece.side == self.side):
                     self.dragged = piece
                     self.moves, self.captures = piece.move_and_capture_squares(self.board, check_side=True)
+                    self.promotions = piece.promotion_squares()
 
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1 and self.dragged:
             target = self.hit_test()
@@ -138,6 +142,9 @@ class Game:
                 piece = self.board.squares[sq]
                 if piece and piece != self.dragged:
                     self.draw_piece(piece, square)
+
+                if self.dragged and sq in self.promotions:
+                    self.surface.blit(self.promo, square)
 
         if self.dragged:
             x, y = pygame.mouse.get_pos()
@@ -173,6 +180,16 @@ class Game:
         # Scaled piece textures.
         f = pygame.transform.smoothscale if SMOOTH else pygame.transform.scale
         self.scaled = {k: f(v, (s, s)) for k, v in self.textures.items()}
+
+        # Scaled promotion texture.
+        self.promo = pygame.Surface(self.square_rect.size, pygame.SRCALPHA)
+        pygame.draw.circle(
+            self.promo,
+            self.theme["promotion"],
+            (self.square_rect.width // 2, self.square_rect.height // 2),
+            self.square_rect.width // 4,
+        )
+        self.promo.set_alpha(180)
 
     def hit_test(self):
         mx, my = pygame.mouse.get_pos()
