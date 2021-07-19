@@ -61,6 +61,21 @@ class Piece:
 
         return set()
 
+    def promotion_pieces(self):
+        if self.kind == Kind.PAWN:
+            return [Kind.UNICORN]
+
+        elif self.kind == Kind.CENTURION:
+            return [Kind.LION, Kind.GRYPHON, Kind.QUEEN]
+
+        elif self.kind == Kind.BUFFOON:
+            return [Kind.QUEEN]
+
+        elif self.kind == Kind.SHIP:
+            return [Kind.GRYPHON]
+
+        return []
+
     def move(self, square):
         self.square = square
         self.x, self.y = to_coords(square)

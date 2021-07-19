@@ -139,6 +139,13 @@ class Board:
             else:
                 self.en_passant = (-1, -1)
 
+            if to_sq in piece.promotion_squares():
+                options = piece.promotion_pieces()
+                if len(options) == 1:
+                    piece.kind = options[0]
+                else:
+                    return options
+
             self.turn = 3 - self.turn
             mate = self.check_mate()
             if mate == 1:
@@ -185,6 +192,18 @@ class Board:
         if self.in_check(side):
             return 2
         return 1
+
+    def promote(self, square, kind):
+        piece = self.squares[square]
+        piece.kind = kind
+        self.turn = 3 - self.turn
+        mate = self.check_mate()
+        if mate == 1:
+            return "Stalemate"
+        if mate == 2:
+            return "Checkmate"
+        return "Valid"
+
 
 
 if __name__ == "__main__":
