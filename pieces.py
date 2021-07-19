@@ -181,6 +181,6 @@ class Piece:
 
         for to_sq in captures:
             if board.check_move_for_check(self.square, to_sq):
-                valid_moves.add(to_sq)
+                valid_captures.add(to_sq)
 
         return valid_moves, valid_captures
