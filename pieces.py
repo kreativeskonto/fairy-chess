@@ -41,12 +41,25 @@ class Piece:
             self.square = to_square(xy)
 
     def promotion_squares(self):
-        if self.kind != Kind.PAWN:
-            return []
-        elif self.side == 1:
-            return set(range(BOARD_SIZE ** 2 - BOARD_SIZE, BOARD_SIZE ** 2))
-        else:
-            return set(range(BOARD_SIZE))
+        if self.kind in [Kind.PAWN, Kind.CENTURION]:
+            if self.side == 1:
+                return set(range(BOARD_SIZE ** 2 - BOARD_SIZE, BOARD_SIZE ** 2))
+            else:
+                return set(range(BOARD_SIZE))
+
+        elif self.kind == Kind.BUFFOON:
+            if self.side == 1:
+                return set(range((BOARD_SIZE ** 2) // 2, (BOARD_SIZE ** 2) // 2 + BOARD_SIZE))
+            else:
+                return set(range((BOARD_SIZE ** 2) // 2 - BOARD_SIZE, (BOARD_SIZE ** 2) // 2))
+
+        elif self.kind == Kind.SHIP:
+            if self.side == 1:
+                return {BOARD_SIZE ** 2 - BOARD_SIZE, BOARD_SIZE ** 2 - 1}
+            else:
+                return {0, BOARD_SIZE - 1}
+
+        return set()
 
     def move(self, square):
         self.square = square
@@ -128,20 +141,28 @@ class Piece:
         elif self.kind == Kind.PAWN:
             if self.side == 1:
                 move, _ = board.ray(self.side, self.square, [DIR_NORTH], max_length=2)
-                _, cap = board.ray(self.side, self.square, [DIR_NORTHEAST, DIR_NORTHWEST], max_length=1)
+                en_pas, cap = board.ray(self.side, self.square, [DIR_NORTHEAST, DIR_NORTHWEST], max_length=1)
             else:
                 move, _ = board.ray(self.side, self.square, [DIR_SOUTH], max_length=2)
-                _, cap = board.ray(self.side, self.square, [DIR_SOUTHEAST, DIR_SOUTHWEST], max_length=1)
+                en_pas, cap = board.ray(self.side, self.square, [DIR_SOUTHEAST, DIR_SOUTHWEST], max_length=1)
+            for sq in en_pas:
+                if sq == board.en_passant[0] and board.squares[board.en_passant[1]].kind == Kind.PAWN:
+                    cap.add(sq)
             moves, captures = move, cap
 
         elif self.kind == Kind.CENTURION:
             if self.side == 1:
-                move1, _ = board.ray(self.side, self.square, [DIR_NORTH], max_length=2)
-                move2, cap = board.ray(self.side, self.square, [DIR_NORTHEAST, DIR_NORTHWEST], max_length=1)
+                move, _ = board.ray(self.side, self.square, [DIR_NORTH], max_length=2)
+                en_pas, cap = board.ray(self.side, self.square, [DIR_NORTHEAST, DIR_NORTHWEST], max_length=1)
             else:
-                move1, _ = board.ray(self.side, self.square, [DIR_SOUTH], max_length=2)
-                move2, cap = board.ray(self.side, self.square, [DIR_SOUTHEAST, DIR_SOUTHWEST], max_length=1)
-            moves, captures = move1 | move2, cap
+                move, _ = board.ray(self.side, self.square, [DIR_SOUTH], max_length=2)
+                en_pas, cap = board.ray(self.side, self.square, [DIR_SOUTHEAST, DIR_SOUTHWEST], max_length=1)
+            for sq in en_pas:
+                if sq == board.en_passant[0]:
+                    cap.add(sq)
+                else:
+                    move.add(sq)
+            moves, captures = move, cap
 
         elif self.kind == Kind.SHIP:
             move1, cap1 = board.ray(self.side, to_square((self.x - 1, self.y)), [DIR_NORTH, DIR_SOUTH]) if self.x > 0 else (set(), set())

@@ -8,11 +8,13 @@ class Board:
         self.squares = [None] * (self.size ** 2)
         self.turn = turn
 
-        self.en_passant = None
-        self.moves = set()
+        self.en_passant = (-1, -1)
+        self.move_history = []
 
     def clear(self):
         self.squares = [None] * (self.size ** 2)
+        self.en_passant = (-1, -1)
+        self.move_history = []
 
     def create_piece(self, side, kind, square=0, xy=None):
         piece = Piece(side, kind, square, xy)
@@ -122,9 +124,21 @@ class Board:
         moves = moves[0] | moves[1]
         piece = self.squares[from_sq]
         if to_sq in moves:
+            if self.en_passant[0] >= 0:
+                if to_sq == self.en_passant[0] and piece.kind in [Kind.PAWN, Kind.CENTURION]:
+                    self.squares[self.en_passant[1]] = None
+                self.squares[self.en_passant[0]] = None
             piece.move(to_sq)
             self.squares[to_sq] = piece
             self.squares[from_sq] = None
+            self.move_history.append((from_sq, to_sq))
+
+            passant = (from_sq + to_sq) // 2
+            if piece.kind in [Kind.PAWN, Kind.CENTURION] and abs(from_sq - to_sq) == BOARD_SIZE * 2:
+                self.en_passant = (passant, to_sq)
+            else:
+                self.en_passant = (-1, -1)
+
             self.turn = 3 - self.turn
             mate = self.check_mate()
             if mate == 1:
@@ -142,8 +156,9 @@ class Board:
                 if piece.side != side:
                     _, captures = piece.move_and_capture_squares(self, check_check=False)
                     for cap in captures:
-                        if self.squares[cap].kind == Kind.KING:
-                            return True
+                        if cap != self.en_passant[0]:
+                            if self.squares[cap].kind == Kind.KING:
+                                return True
         return False
 
     def check_move_for_check(self, from_sq, to_sq):
