@@ -31,7 +31,7 @@ THEMES = {
 
 
 class Game:
-    def __init__(self, host):
+    def __init__(self, mode):
         pygame.init()
         pygame.display.set_caption("Fairy chess")
 
@@ -56,7 +56,7 @@ class Game:
 
         self.board = Board()
         self.board.setup_file("default_moab.pos")
-        self.side = 1 if host else 2
+        self.mode = mode
 
         self.dragged = None
         self.moves = []
@@ -65,9 +65,12 @@ class Game:
         self.incoming = Queue()
         self.outgoing = Queue()
 
-        self.network = NetworkThread(host, self.incoming, self.outgoing)
-        self.network.daemon = True
-        self.network.start()
+        if mode in "HC":
+            host = mode == "H"
+            self.side = 1 if host else 2
+            self.network = NetworkThread(host, self.incoming, self.outgoing)
+            self.network.daemon = True
+            self.network.start()
 
     def run(self):
         while True:
@@ -99,7 +102,7 @@ class Game:
             sq = self.hit_test()
             if sq is not None:
                 piece = self.board.squares[sq]
-                if piece and piece.side == self.side:
+                if piece and (self.mode == "L" or piece.side == self.side):
                     self.dragged = piece
                     self.moves, self.captures = piece.move_and_capture_squares(self.board, check_side=True)
 
@@ -232,6 +235,7 @@ class NetworkThread(Thread):
 
 
 if __name__ == "__main__":
-    mode = input("Do you want to host (H) or connect (C) ").upper()
-    host = mode == "H"
-    Game(host).run()
+    mode = input("Do you want to host (H), connect (C) or play locally (L)? ").upper()
+    assert mode in "HCL"
+
+    Game(mode).run()
