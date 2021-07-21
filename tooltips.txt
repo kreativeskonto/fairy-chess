@@ -1,0 +1,90 @@
+PAWN
+Can advance one or two squares without capturing. Can move one square forward diagonally to capture only.
+Can capture other pawns en passant: When an enemy pawn advances two squares and ends up to to the left or right of your pawn,
+your pawn can take that enemy pawn as if it had advanced only one square.
+This special capture can only be done during the first turn it is possible.
+A pawn reaching the last row of the board is promoted to a unicorn.
+
+KNIGHT
+Can move to the opposite corner of a 2x3 or 3x2 rectangle, jumping over any pieces in its way.
+This way, the knight always changes the color of the square it stands on when moving.
+
+BISHOP
+Can move in any diagonal direction until a piece or the rim of the board stops it.
+This way, the bishop never leaves the color of the square it stands on.
+
+ROOK
+Can move in any orthogonal direction until a piece or the rim of the board stops it.
+
+QUEEN
+Can move in any direction until a piece or the rim of the board stops it.
+The queen combines the powers of the rook and the bishop.
+
+ELEPHANT
+Can move one or two squares diagonally. When moving two squares, it may jump to reach its destination.
+This way, the elephant never leaves the color of the square it stands on.
+
+MACHINE
+Can move one or two squares orthogonally. When moving two squares, it may jump to reach its destination.
+
+SHIP
+Can move one square diagonally and then up or down, away from its position, until a piece or the rim of the board stops it.
+
+BUFFOON
+Can move one square in any direction, like a king, without being hindered by check.
+A buffoon reaching the first row on the opponent's side of the board promotes to a queen.
+
+LEGIONNAIRE
+Can advance one or two squares without capturing. Can move one square forward diagonally, allowing it to capture.
+Can capture other pawns and legionnaires en passant: When an enemy pawn or legionnaire advances two squares and ends up to to the left or right of your legionnaire,
+your legionnaire can take that enemy piece as if it had advanced only one square.
+This special capture can only be done during the first turn it is possible.
+A legionnaire reaching the last row of the board is promoted to your choice of a queen, lion or gryphon.
+
+LION
+Can jump to any square within a 5x5 region centered on it.
+The lion combines the powers of the elephant, machine and knight.
+
+GRYPHON
+Can move one square diagonally and then orthogonally away until a piece or the rim of the board stops it.
+
+ANTELOPE
+Can move two or three squares in any direction, jumping over any pieces in its way.
+
+CAMEL
+Can jump to the opposite corner of a 2x4 or 4x2 rectangle, jumping over any pieces in it way.
+This way, the camel never leaves the color of the square it stands on.
+
+BOW
+Can move diagonally like a bishop without capturing.
+To capture an enemy piece, the bow also moves in a diagonal direction but has to jump over exactly one piece.
+This way, the bow never leaves the color of the square it stands on.
+
+BULL
+Can jump to the opposite corner of a 3x4 or 4x3 rectangle, jumping over any pieces in it way.
+This way, the bull always changes the color of the square it stands on when moving.
+
+CANNON
+Can move orthogonally like a rook without capturing.
+To capture an enemy piece, the cannon also moves in an orthogonal direction but has to jump over exactly one piece.
+
+BUFFALO
+Can jump to the opposite corner of a 2x3, 3x2, 2x4, 4x2, 3x4 or 4x3 rectangle, jumping over any pieces in it way.
+The buffalo combines the powers of the knight, camel and bull.
+
+RHINOCEROS
+Jumps like a knight and then moves diagonally away until a piece or the rim of the board stops it.
+This way, the bull always changes the color of the square it stands on when moving.
+
+STAR
+Can move in any direction without capturing, like a queen.
+To capture an enemy piece, the star also moves like a queen but has to jump over exactly one piece.
+
+UNICORN
+Can move in any direction like a queen or to the opposite corner of a 2x3 or 3x2 rectangle like a knight.
+
+DRAGONWOMAN
+Can move in orthogonally like a rook or to the opposite corner of a 2x3 or 3x2 rectangle like a knight.
+
+DIABLO
+Can move diagonally like a bishop or to the opposite corner of a 2x3 or 3x2 rectangle like a knight.

@@ -16,7 +16,7 @@ class Kind(Enum):
     MACHINE = "Machine"
     UNICORN = "Unicorn"
     DIABLO = "Diablo"
-    ANTILOPE = "Antilope"
+    ANTELOPE = "Antelope"
     BULL = "Bull"
     BUFFALO = "Buffalo"
     LION = "Lion"
@@ -133,7 +133,7 @@ class Piece:
         elif self.kind == Kind.BULL:
             moves, captures = board.knights_move(self.side, self.square, ab=(3, 2))
 
-        elif self.kind == Kind.ANTILOPE:
+        elif self.kind == Kind.ANTELOPE:
             move1, cap1 = board.knights_move(self.side, self.square, ab=(2, 2))
             move2, cap2 = board.knights_move(self.side, self.square, ab=(3, 3))
             move3, cap3 = board.knights_move(self.side, self.square, ab=(2, 0))
