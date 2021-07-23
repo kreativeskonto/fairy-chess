@@ -246,7 +246,7 @@ class Game:
                 self.dragged = None
 
     def square(self, sq):
-        x, y = to_coords(sq)
+        x, y = to_coords(255 - sq if self.side == 2 else sq)
 
         if self.dragged and sq in self.moves:
             key = "move"
