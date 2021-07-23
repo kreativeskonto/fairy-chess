@@ -45,7 +45,7 @@ class Game:
         self.theme = THEMES["Chess.com"]
         self.padding = 20
         self.board = Board()
-        self.board.setup_file("default_moab.pos")
+        self.board.setup_file("resources/default_moab.pos")
 
         # Window, event and drag state.
         pygame.display.set_caption("Fairy chess")
@@ -59,12 +59,8 @@ class Game:
 
         # Piece textures.
         self.textures = {}
-        for path, _, files in os.walk("pieces"):
-            for file in files:
-                filepath = os.path.join(path, file)
-                kind = Kind[os.path.splitext(file)[0].upper()]
-                side = 1 if "white" in path else 2
-                self.textures[(side, kind)] = pygame.image.load(filepath).convert_alpha()
+        self.load_textures("resources/black")
+        self.load_textures("resources/white")
 
         # Scale-dependent things.
         self.board_rect: Rect = None
@@ -73,8 +69,8 @@ class Game:
         self.resize()
 
         # Sound
-        self.move_sound = pygame.mixer.Sound("move.ogg")
-        self.capture_sound = pygame.mixer.Sound("capture.ogg")
+        self.move_sound = pygame.mixer.Sound("resources/move.ogg")
+        self.capture_sound = pygame.mixer.Sound("resources/capture.ogg")
 
         # Network communication queues.
         self.incoming = Queue()
@@ -87,6 +83,14 @@ class Game:
             self.network = NetworkThread(host, self.incoming, self.outgoing)
             self.network.daemon = True
             self.network.start()
+
+    def load_textures(self, dir):
+        for path, _, files in os.walk(dir):
+            for file in files:
+                filepath = os.path.join(path, file)
+                kind = Kind[os.path.splitext(file)[0].upper()]
+                side = 1 if "white" in path else 2
+                self.textures[(side, kind)] = pygame.image.load(filepath).convert_alpha()
 
     def resize(self):
         # Determine the size of a screen-filling, slightly padded board with

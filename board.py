@@ -21,7 +21,7 @@ class Board:
         self.squares[piece.square] = piece
 
     def setup_file(self, filename):
-        with open("positions/" + filename) as file:
+        with open(filename) as file:
             content = file.readlines()
 
         self.clear()
