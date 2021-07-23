@@ -205,7 +205,7 @@ class Game:
         self.text(f"Your local IP is {self.local_ip}")
         self.text(f"Your public IP is {self.public_ip}" if self.public_ip else "")
         self.text("")
-        self.text(f"Waiting for opponent " + dots())
+        self.text(f"Waiting for opponent " + self.dots())
 
     def joinmenu(self):
         if self.event.type == pygame.KEYDOWN:
@@ -228,7 +228,7 @@ class Game:
             Thread(target=self.netloop, daemon=True).start()
 
     def connecting(self):
-        self.text(f"Connecting with {self.peer_ip} " + dots(), pos=self.screen_rect.center)
+        self.text(f"Connecting with {self.peer_ip} " + self.dots(), pos=self.screen_rect.center)
 
     def ingame(self):
         self.mutex.acquire()
@@ -391,9 +391,9 @@ class Game:
     def lookup_public_ip(self):
         self.public_ip = request.urlopen("https://api.ipify.org").read().decode()
 
-
-def dots():
-    return (1 + int(time.time()) % 3) * "."
+    def dots(self):
+        self.dirty = True
+        return (1 + int(time.time()) % 3) * "."
 
 
 if __name__ == "__main__":
