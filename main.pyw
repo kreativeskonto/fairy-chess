@@ -1,12 +1,11 @@
 import sys
 import os
 import socket
+import time
 
-from queue import Empty, Queue
-from threading import Thread
+from enum import Enum
+from threading import Thread, Lock
 from urllib import request
-
-from pygame.constants import MOUSEBUTTONUP
 
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 
@@ -15,7 +14,7 @@ from pygame import Color, Rect
 
 from board import Board
 from pieces import Kind
-from util import BOARD_SIZE, to_coords, to_square
+from util import BOARD_SIZE, to_coords
 
 PORT = 5398
 BLACK = Color(0, 0, 0)
@@ -24,6 +23,7 @@ SMOOTH = False
 THEMES = {
     "Chess.com": {
         "background": Color("#333333"),
+        "text": Color("#eeeeee"),
         "white": Color("#eeeed2"),
         "black": Color("#769656"),
         "move": Color("#baca2b"),
@@ -34,24 +34,43 @@ THEMES = {
 }
 
 
+class State(Enum):
+    MAINMENU = 0
+    HOSTMENU = 1
+    JOINMENU = 2
+    CONNECTING = 3
+    INGAME = 4
+
+class Mode(Enum):
+    LOCAL = "Play locally"
+    HOST = "Host network game"
+    JOIN = "Join network game"
+
+
 class Game:
-    def __init__(self, mode):
+    def __init__(self):
         pygame.init()
+        pygame.font.init()
         pygame.mixer.init()
+        pygame.key.set_repeat(500, 40)
 
         # Configuration
-        self.mode = mode
+        self.mode = None
         self.size = BOARD_SIZE
         self.theme = THEMES["Chess.com"]
         self.padding = 20
         self.board = Board()
         self.board.setup_file("resources/default_moab.pos")
+        self.side = None
 
         # Window, event and drag state.
         pygame.display.set_caption("Fairy chess")
         self.surface = pygame.display.set_mode((800, 670), flags=pygame.RESIZABLE)
+        self.state = State.MAINMENU
         self.event = None
+        self.dirty = False
         self.pressed = False
+        self.cursor = [0, 0]
         self.dragged = None
         self.moves = []
         self.captures = []
@@ -63,26 +82,24 @@ class Game:
         self.load_textures("resources/white")
 
         # Scale-dependent things.
-        self.board_rect: Rect = None
+        self.screen_rect: Rect = None
         self.square_rect: Rect = None
+        self.square_rect: Rect = None
+        self.title_font = None
+        self.body_font = None
         self.scaled = {}
         self.resize()
 
-        # Sound
+        # Sounds.
         self.move_sound = pygame.mixer.Sound("resources/move.ogg")
         self.capture_sound = pygame.mixer.Sound("resources/capture.ogg")
 
-        # Network communication queues.
-        self.incoming = Queue()
-        self.outgoing = Queue()
-
-        # Network thread.
-        if mode in "HC":
-            host = mode == "H"
-            self.side = 1 if host else 2
-            self.network = NetworkThread(host, self.incoming, self.outgoing)
-            self.network.daemon = True
-            self.network.start()
+        # Network communication.
+        self.local_ip = socket.gethostbyname(socket.gethostname())
+        self.public_ip = None
+        self.peer_ip = ""
+        self.socket = None
+        self.mutex = Lock()
 
     def load_textures(self, dir):
         for path, _, files in os.walk(dir):
@@ -100,6 +117,9 @@ class Game:
         b -= b % self.size
         s = b // self.size
 
+        # Rectangle for the whole screen.
+        self.screen_rect = Rect(0, 0, w, h)
+
         # Rectangle for the whole board.
         self.board_rect = Rect(0, 0, b, b)
         self.board_rect.center = w / 2, h / 2
@@ -112,27 +132,24 @@ class Game:
         f = pygame.transform.smoothscale if SMOOTH else pygame.transform.scale
         self.scaled = {k: f(v, (s, s)) for k, v in self.textures.items()}
 
-    def run(self):
-        while True:
-            try:
-                item = self.incoming.get(block=False)
-                feedback, mocap = self.board.move(*item)
-                if feedback in ("Stalemate", "Checkmate"):
-                    print(feedback)
-                if feedback != "Invalid":
-                    if mocap == "Move":
-                        self.move_sound.play()
-                    elif mocap == "Capture":
-                        self.capture_sound.play()
-            except Empty:
-                pass
+        # Scaled font.
+        self.title_font = pygame.font.Font(None, b // 12)
+        self.body_font = pygame.font.Font(None, b // 20)
 
+    def mainloop(self):
+        while True:
             self.event = pygame.event.wait(50)
+            if self.event.type == pygame.NOEVENT and not self.dirty:
+                continue
+
+            self.dirty = False
             self.refresh()
 
             for event in pygame.event.get():
                 self.event = event
                 self.refresh()
+
+            self.refresh()
 
     def refresh(self):
         if self.event.type == pygame.QUIT:
@@ -145,9 +162,79 @@ class Game:
             self.pressed = False
 
         self.surface.fill(self.theme["background"])
+        self.cursor = [self.screen_rect.centerx, self.screen_rect.height // 3]
 
+        if self.state == State.MAINMENU:
+            self.mainmenu()
+
+        elif self.state == State.HOSTMENU:
+            self.hostmenu()
+
+        elif self.state == State.JOINMENU:
+            self.joinmenu()
+
+        elif self.state == State.CONNECTING:
+            self.connecting()
+
+        elif self.state == State.INGAME:
+            self.ingame()
+
+        pygame.display.update()
+
+    def mainmenu(self):
+        self.text("Fairy chess", title=True)
+        for mode in Mode:
+            if self.button(mode.value):
+                self.mode = mode
+
+                if mode == Mode.LOCAL:
+                    self.state = State.INGAME
+
+                elif mode == Mode.HOST:
+                    self.state = State.HOSTMENU
+                    self.side = 1
+                    Thread(target=self.lookup_public_ip, daemon=True).start()
+                    Thread(target=self.netloop, daemon=True).start()
+
+                elif mode == Mode.JOIN:
+                    self.state = State.JOINMENU
+                    self.side = 2
+
+    def hostmenu(self):
+        self.text("Hosting game", title=True)
+        self.text(f"Your local IP is {self.local_ip}")
+        self.text(f"Your public IP is {self.public_ip}" if self.public_ip else "")
+        self.text("")
+        self.text(f"Waiting for opponent " + dots())
+
+    def joinmenu(self):
+        if self.event.type == pygame.KEYDOWN:
+            if self.event.key == pygame.K_BACKSPACE:
+                self.peer_ip = self.peer_ip[:-1]
+            else:
+                value = self.event.unicode.upper()
+                if value in "0123456789ABCDEF.:":
+                    self.peer_ip += value
+
+        self.text("Joining game", title=True)
+        self.text("Please enter the IP you want to connect with:")
+        self.text(self.peer_ip)
+        self.text("")
+
+        if self.button("Connect") or self.enter():
+            self.state = State.CONNECTING
+            if not self.peer_ip:
+                self.peer_ip = self.local_ip
+            Thread(target=self.netloop, daemon=True).start()
+
+    def connecting(self):
+        self.text(f"Connecting with {self.peer_ip} " + dots(), pos=self.screen_rect.center)
+
+    def ingame(self):
+        self.mutex.acquire()
         for sq in range(len(self.board.squares)):
             self.square(sq)
+        self.mutex.release()
 
         if self.dragged:
             x, y = pygame.mouse.get_pos()
@@ -157,8 +244,6 @@ class Game:
 
             if self.mouseup() and not self.board_rect.collidepoint(*pygame.mouse.get_pos()):
                 self.dragged = None
-
-        pygame.display.update()
 
     def square(self, sq):
         x, y = to_coords(sq)
@@ -180,22 +265,17 @@ class Game:
         if square.collidepoint(*pygame.mouse.get_pos()):
             if self.mousedown():
                 piece = self.board.squares[sq]
-                if piece and (self.mode == "L" or piece.side == self.side):
+                if piece and (self.mode == Mode.LOCAL or piece.side == self.side):
                     self.dragged = piece
                     self.moves, self.captures = piece.move_and_capture_squares(self.board, check_side=True)
                     self.promotions = piece.promotion_squares()
 
             elif self.dragged and self.mouseup():
                 item = (self.dragged.square, sq)
-                feedback, mocap = self.board.move(*item)
-                if feedback != "Invalid":
-                    self.outgoing.put(item)
-                    if mocap == "Move":
-                        self.move_sound.play()
-                    elif mocap == "Capture":
-                        self.capture_sound.play()
-                if feedback in ("Stalemate", "Checkmate"):
-                    print(feedback)
+                feedback = self.board.move(*item)
+                self.handle_feedback(feedback)
+                if feedback != "Invalid" and self.socket is not None:
+                    self.socket.send(bytes(item))
                 self.dragged = None
 
         piece = self.board.squares[sq]
@@ -220,67 +300,101 @@ class Game:
         except KeyError:
             pass
 
+    def button(self, text, pos=None):
+        flow = pos is None
+        if flow:
+            pos = self.cursor
+
+        bitmap = self.body_font.render(text, True, self.theme["text"])
+        rect = bitmap.get_rect()
+        rect.center = pos
+
+        if flow:
+            self.cursor[1] += 1.5 * rect.height
+
+        clicked = False
+        if rect.collidepoint(*pygame.mouse.get_pos()):
+            bitmap.set_alpha(150 if self.pressed else 200)
+            clicked = self.mouseup()
+
+        self.surface.blit(bitmap, rect)
+        return clicked
+
+    def text(self, text, pos=None, center=True, title=False):
+        flow = pos is None
+        if flow:
+            pos = self.cursor
+
+        font = self.title_font if title else self.body_font
+        font.underline = title
+        bitmap = font.render(text, True, self.theme["text"])
+
+        rect = bitmap.get_rect()
+        if center:
+            rect.center = pos
+        else:
+            rect.topleft = pos
+
+        if flow:
+            self.cursor[1] += (2.0 if title else 1.5) * rect.height
+
+        self.surface.blit(bitmap, rect)
+
     def mouseup(self):
         return self.event.type == pygame.MOUSEBUTTONUP and self.event.button == 1
 
     def mousedown(self):
         return self.event.type == pygame.MOUSEBUTTONDOWN and self.event.button == 1
 
+    def enter(self):
+        return self.event.type == pygame.KEYDOWN and self.event.key == pygame.K_RETURN
 
-class NetworkThread(Thread):
-    def __init__(self, host, incoming, outgoing):
-        Thread.__init__(self)
-        self.host = host
-        self.incoming = incoming
-        self.outgoing = outgoing
-
-    def run(self):
+    def netloop(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-        if self.host:
-            # Find out own local and public IP
-            local_ip = socket.gethostbyname(socket.gethostname())
-            public_ip = request.urlopen("https://api.ipify.org").read().decode()
-
-            print(f"If you want to play over the internet, you need to forward port {PORT}.")
-            print(f"Your IP address is:")
-            print(f"  {local_ip} in the local network.")
-            print(f"  {public_ip} in the internet.")
-
-            self.socket.bind((local_ip, PORT))
-            self.socket.listen(1)
-
-            self.socket, (peer_ip, _) = self.socket.accept()
-
+        if self.peer_ip:
+            print(f"Connecting to {self.peer_ip}")
+            self.socket.connect((self.peer_ip, PORT))
         else:
-            peer_ip = input("Please enter the IP you want to connect to: ")
-            print(f"Connecting to {peer_ip}:{PORT}")
-            self.socket.connect((peer_ip, PORT))
+            print(f"Listening for incoming connections")
+            self.socket.bind((self.local_ip, PORT))
+            self.socket.listen(1)
+            self.socket, (self.peer_ip, _) = self.socket.accept()
 
-        print(f"Connected with {peer_ip}")
-
-        self.socket.settimeout(0.1)
+        print(f"Connected to {self.peer_ip}")
+        self.state = State.INGAME
+        self.dirty = True
 
         while True:
-            try:
-                data = self.socket.recv(2)
-                assert len(data) == 2
-                item = tuple(data)
-                self.incoming.put(item)
-            except socket.timeout:
-                pass
+            data = self.socket.recv(2)
+            assert len(data) == 2
 
-            try:
-                item = self.outgoing.get(block=False)
-                assert len(item) == 2
-                self.socket.send(bytes(item))
-            except Empty:
-                pass
+            self.mutex.acquire()
+            feedback = self.board.move(*data)
+            self.dirty = True
+            self.mutex.release()
+            self.handle_feedback(feedback)
+
+    def handle_feedback(self, feedback):
+        result, mocap = feedback
+
+        if result in ("Stalemate", "Checkmate"):
+            print(result)
+
+        if result != "Invalid":
+            if mocap == "Move":
+                self.move_sound.play()
+            elif mocap == "Capture":
+                self.capture_sound.play()
+
+    def lookup_public_ip(self):
+        self.public_ip = request.urlopen("https://api.ipify.org").read().decode()
+
+
+def dots():
+    return (1 + int(time.time()) % 3) * "."
 
 
 if __name__ == "__main__":
-    mode = input("Do you want to host (H), connect (C) or play locally (L)? ").upper()
-    assert mode in "HCL"
-
-    Game(mode).run()
+    Game().mainloop()
