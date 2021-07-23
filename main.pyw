@@ -6,6 +6,8 @@ from queue import Empty, Queue
 from threading import Thread
 from urllib import request
 
+from pygame.constants import MOUSEBUTTONUP
+
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 
 import pygame
@@ -13,7 +15,7 @@ from pygame import Color, Rect
 
 from board import Board
 from pieces import Kind
-from util import BOARD_SIZE, to_square
+from util import BOARD_SIZE, to_coords, to_square
 
 PORT = 5398
 BLACK = Color(0, 0, 0)
@@ -34,14 +36,26 @@ THEMES = {
 class Game:
     def __init__(self, mode):
         pygame.init()
-        pygame.display.set_caption("Fairy chess")
 
+        # Configuration
+        self.mode = mode
         self.size = BOARD_SIZE
         self.theme = THEMES["Chess.com"]
         self.padding = 20
+        self.board = Board()
+        self.board.setup_file("default_moab.pos")
 
+        # Window, event and drag state.
+        pygame.display.set_caption("Fairy chess")
         self.surface = pygame.display.set_mode((800, 670), flags=pygame.RESIZABLE)
+        self.event = None
+        self.pressed = False
+        self.dragged = None
+        self.moves = []
+        self.captures = []
+        self.promotions = []
 
+        # Piece textures.
         self.textures = {}
         for path, _, files in os.walk("pieces"):
             for file in files:
@@ -50,116 +64,23 @@ class Game:
                 side = 1 if "white" in path else 2
                 self.textures[(side, kind)] = pygame.image.load(filepath).convert_alpha()
 
+        # Scale-dependent things.
         self.board_rect: Rect = None
         self.square_rect: Rect = None
         self.scaled = {}
-        self.promo: pygame.Surface = None
         self.resize()
 
-        self.board = Board()
-        self.board.setup_file("default_moab.pos")
-        self.mode = mode
-
-        self.dragged = None
-        self.moves = []
-        self.captures = []
-        self.promotions = []
-
+        # Network communication queues.
         self.incoming = Queue()
         self.outgoing = Queue()
 
+        # Network thread.
         if mode in "HC":
             host = mode == "H"
             self.side = 1 if host else 2
             self.network = NetworkThread(host, self.incoming, self.outgoing)
             self.network.daemon = True
             self.network.start()
-
-    def run(self):
-        while True:
-            try:
-                item = self.incoming.get(block=False)
-                from_sq, to_sq = item
-                feedback = self.board.move(from_sq, to_sq)
-                if feedback in ("Stalemate", "Checkmate"):
-                    print(feedback)
-            except Empty:
-                pass
-
-            event = pygame.event.wait(50)
-            self.update(event)
-
-            for event in pygame.event.get():
-                self.update(event)
-
-            self.draw()
-
-    def update(self, event):
-        if event.type == pygame.QUIT:
-            sys.exit()
-
-        elif event.type == pygame.VIDEORESIZE:
-            self.resize()
-
-        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            sq = self.hit_test()
-            if sq is not None:
-                piece = self.board.squares[sq]
-                if piece and (self.mode == "L" or piece.side == self.side):
-                    self.dragged = piece
-                    self.moves, self.captures = piece.move_and_capture_squares(self.board, check_side=True)
-                    self.promotions = piece.promotion_squares()
-
-        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1 and self.dragged:
-            target = self.hit_test()
-            if target is not None:
-                item = (self.dragged.square, target)
-                feedback = self.board.move(*item)
-                self.outgoing.put(item)
-                if feedback in ("Stalemate", "Checkmate"):
-                    print(feedback)
-
-            self.dragged = None
-
-    def draw(self):
-        self.surface.fill(self.theme["background"])
-
-        for x in range(self.size):
-            for y in range(self.size):
-                sq = to_square((x, y))
-                if self.dragged and sq in self.moves:
-                    key = "move"
-                elif self.dragged and sq in self.captures:
-                    key = "capture"
-                elif (x + y) % 2:
-                    key = "white"
-                else:
-                    key = "black"
-
-                square = self.square_rect.move(x * self.square_rect.width, -y * self.square_rect.height)
-                pygame.draw.rect(self.surface, self.theme[key], square)
-
-                piece = self.board.squares[sq]
-                if piece and piece != self.dragged:
-                    self.draw_piece(piece, square)
-
-                if self.dragged and sq in self.promotions:
-                    self.surface.blit(self.promo, square)
-
-        if self.dragged:
-            x, y = pygame.mouse.get_pos()
-            x -= self.square_rect.width // 2
-            y -= self.square_rect.height // 2
-            self.draw_piece(self.dragged, (x, y))
-
-        pygame.display.update()
-
-    def draw_piece(self, piece, where):
-        try:
-            bitmap = self.scaled[piece.side, piece.kind]
-            self.surface.blit(bitmap, where)
-        except KeyError:
-            pass
 
     def resize(self):
         # Determine the size of a screen-filling, slightly padded board with
@@ -181,22 +102,108 @@ class Game:
         f = pygame.transform.smoothscale if SMOOTH else pygame.transform.scale
         self.scaled = {k: f(v, (s, s)) for k, v in self.textures.items()}
 
-        # Scaled promotion texture.
-        self.promo = pygame.Surface(self.square_rect.size, pygame.SRCALPHA)
-        pygame.draw.circle(
-            self.promo,
-            self.theme["promotion"],
-            (self.square_rect.width // 2, self.square_rect.height // 2),
-            self.square_rect.width // 4,
-        )
-        self.promo.set_alpha(180)
+    def run(self):
+        while True:
+            try:
+                item = self.incoming.get(block=False)
+                feedback = self.board.move(*item)
+                if feedback in ("Stalemate", "Checkmate"):
+                    print(feedback)
+            except Empty:
+                pass
 
-    def hit_test(self):
-        mx, my = pygame.mouse.get_pos()
-        if self.board_rect.collidepoint(mx, my):
-            x = int((mx - self.board_rect.left) / self.square_rect.width)
-            y = int((self.board_rect.bottom - my) / self.square_rect.height)
-            return to_square((x, y))
+            self.event = pygame.event.wait(50)
+            self.refresh()
+
+            for event in pygame.event.get():
+                self.event = event
+                self.refresh()
+
+    def refresh(self):
+        if self.event.type == pygame.QUIT:
+            sys.exit()
+        elif self.event.type == pygame.VIDEORESIZE:
+            self.resize()
+        elif self.mousedown():
+            self.pressed = True
+        elif self.mouseup():
+            self.pressed = False
+
+        self.surface.fill(self.theme["background"])
+
+        for sq in range(len(self.board.squares)):
+            self.square(sq)
+
+        if self.dragged:
+            x, y = pygame.mouse.get_pos()
+            x -= self.square_rect.width // 2
+            y -= self.square_rect.height // 2
+            self.piece(self.dragged, (x, y))
+
+            if self.mouseup() and not self.board_rect.collidepoint(*pygame.mouse.get_pos()):
+                self.dragged = None
+
+        pygame.display.update()
+
+    def square(self, sq):
+        x, y = to_coords(sq)
+
+        if self.dragged and sq in self.moves:
+            key = "move"
+        elif self.dragged and sq in self.captures:
+            key = "capture"
+        elif (x + y) % 2:
+            key = "white"
+        else:
+            key = "black"
+
+        square = self.square_rect.move(x * self.square_rect.width, -y * self.square_rect.height)
+        pygame.draw.rect(self.surface, self.theme[key], square)
+
+        if square.collidepoint(*pygame.mouse.get_pos()):
+            if self.mousedown():
+                piece = self.board.squares[sq]
+                if piece and (self.mode == "L" or piece.side == self.side):
+                    self.dragged = piece
+                    self.moves, self.captures = piece.move_and_capture_squares(self.board, check_side=True)
+                    self.promotions = piece.promotion_squares()
+
+            elif self.dragged and self.mouseup():
+                item = (self.dragged.square, sq)
+                feedback = self.board.move(*item)
+                if feedback != "Invalid":
+                    self.outgoing.put(item)
+                if feedback in ("Stalemate", "Checkmate"):
+                    print(feedback)
+                self.dragged = None
+
+        piece = self.board.squares[sq]
+        if piece and piece != self.dragged:
+            self.piece(piece, square.topleft)
+
+        if self.dragged and sq in self.promotions:
+            temp = pygame.Surface(self.square_rect.size, pygame.SRCALPHA)
+            pygame.draw.circle(
+                temp,
+                self.theme["promotion"],
+                (self.square_rect.width // 2, self.square_rect.height // 2),
+                self.square_rect.width // 4,
+            )
+            temp.set_alpha(180)
+            self.surface.blit(temp, square)
+
+    def piece(self, piece, pos):
+        try:
+            bitmap = self.scaled[piece.side, piece.kind]
+            self.surface.blit(bitmap, pos)
+        except KeyError:
+            pass
+
+    def mouseup(self):
+        return self.event.type == pygame.MOUSEBUTTONUP and self.event.button == 1
+
+    def mousedown(self):
+        return self.event.type == pygame.MOUSEBUTTONDOWN and self.event.button == 1
 
 
 class NetworkThread(Thread):
