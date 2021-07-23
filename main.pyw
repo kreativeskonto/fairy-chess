@@ -29,6 +29,7 @@ THEMES = {
         "move": Color("#baca2b"),
         "capture": Color("#ec7e6a"),
         "promotion": Color("#00d5ff"),
+        "last_squares": Color("#fadf11")
     }
 }
 
@@ -36,6 +37,7 @@ THEMES = {
 class Game:
     def __init__(self, mode):
         pygame.init()
+        pygame.mixer.init()
 
         # Configuration
         self.mode = mode
@@ -69,6 +71,10 @@ class Game:
         self.square_rect: Rect = None
         self.scaled = {}
         self.resize()
+
+        # Sound
+        self.move_sound = pygame.mixer.Sound("move.ogg")
+        self.capture_sound = pygame.mixer.Sound("capture.ogg")
 
         # Network communication queues.
         self.incoming = Queue()
@@ -106,9 +112,14 @@ class Game:
         while True:
             try:
                 item = self.incoming.get(block=False)
-                feedback = self.board.move(*item)
+                feedback, mocap = self.board.move(*item)
                 if feedback in ("Stalemate", "Checkmate"):
                     print(feedback)
+                if feedback != "Invalid":
+                    if mocap == "Move":
+                        self.move_sound.play()
+                    elif mocap == "Capture":
+                        self.capture_sound.play()
             except Empty:
                 pass
 
@@ -152,6 +163,8 @@ class Game:
             key = "move"
         elif self.dragged and sq in self.captures:
             key = "capture"
+        elif self.board.move_history and sq in self.board.move_history[-1]:
+            key = "last_squares"
         elif (x + y) % 2:
             key = "white"
         else:
@@ -170,9 +183,13 @@ class Game:
 
             elif self.dragged and self.mouseup():
                 item = (self.dragged.square, sq)
-                feedback = self.board.move(*item)
+                feedback, mocap = self.board.move(*item)
                 if feedback != "Invalid":
                     self.outgoing.put(item)
+                    if mocap == "Move":
+                        self.move_sound.play()
+                    elif mocap == "Capture":
+                        self.capture_sound.play()
                 if feedback in ("Stalemate", "Checkmate"):
                     print(feedback)
                 self.dragged = None

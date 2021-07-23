@@ -1,4 +1,5 @@
 BOARD_SIZE = 16
+TIME = 3600
 
 
 def to_coords(square):

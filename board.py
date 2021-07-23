@@ -118,9 +118,10 @@ class Board:
         return piece.move_and_capture_squares(self, check_side=check_side)
 
     def move(self, from_sq, to_sq):
+        mocap = "Move" if self.squares[to_sq] is None else "Capture"
         moves = self.possible_moves(from_sq, check_side=True)
         if moves is None:
-            return "Invalid"
+            return "Invalid", mocap
         moves = moves[0] | moves[1]
         piece = self.squares[from_sq]
         if to_sq in moves:
@@ -149,11 +150,11 @@ class Board:
             self.turn = 3 - self.turn
             mate = self.check_mate()
             if mate == 1:
-                return "Stalemate"
+                return "Stalemate", mocap
             if mate == 2:
-                return "Checkmate"
-            return "Valid"
-        return "Invalid"
+                return "Checkmate", mocap
+            return "Valid", mocap
+        return "Invalid", mocap
 
     def in_check(self, side=0):
         if side == 0:
