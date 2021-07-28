@@ -66,7 +66,7 @@ class Game:
 
         # Window, event and drag state.
         pygame.display.set_caption("Fairy chess")
-        self.surface = pygame.display.set_mode((800, 670), flags=pygame.RESIZABLE)
+        self.surface = pygame.display.set_mode((850, 670), flags=pygame.RESIZABLE)
         self.state = State.MAINMENU
         self.event = None
         self.dirty = False
@@ -150,7 +150,7 @@ class Game:
     def mainloop(self):
         while True:
             self.event = pygame.event.wait(50)
-            if self.event.type == pygame.NOEVENT and not self.dirty:
+            if self.event.type == pygame.NOEVENT and not self.dirty and self.last_second == int(time.time()):
                 continue
 
             self.dirty = False
@@ -252,8 +252,8 @@ class Game:
         if self.last_second != int(time.time()):
             self.last_second = int(time.time())
             self.dirty = True
-        clock_rect1 = self.text(format_time(self.black_time), pos=(20, 20), center=False)
-        clock_rect2 = self.text(format_time(self.white_time), pos=(20, self.screen_rect.height - (20 + clock_rect1.y)), center=False)
+        clock_rect1 = self.text(format_time(self.black_time if self.side != 2 else self.white_time), pos=(20, 20), center=False)
+        clock_rect2 = self.text(format_time(self.white_time if self.side != 2 else self.black_time), pos=(20, self.screen_rect.height - (20 + clock_rect1.y)), center=False)
         offset_x = 0
         if self.board_rect.top < clock_rect1.bottom and self.board_rect.left < max(clock_rect1.right, clock_rect2.right) + self.padding:
             offset_x = max(clock_rect1.right, clock_rect2.right) - self.board_rect.left + self.padding
@@ -425,7 +425,6 @@ class Game:
         self.public_ip = request.urlopen("https://api.ipify.org").read().decode()
 
     def dots(self):
-        self.dirty = True
         return (1 + int(time.time()) % 3) * "."
 
 
