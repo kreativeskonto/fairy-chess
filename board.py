@@ -10,6 +10,7 @@ class Board:
 
         self.en_passant = (-1, -1)
         self.move_history = []
+        self.promoting = False
 
     def clear(self):
         self.squares = [None] * (self.size ** 2)
@@ -145,7 +146,8 @@ class Board:
                 if len(options) == 1:
                     piece.kind = options[0]
                 else:
-                    return options
+                    self.promoting = True
+                    return options, mocap
 
             self.turn = 3 - self.turn
             mate = self.check_mate()
@@ -199,6 +201,7 @@ class Board:
         piece.kind = kind
         self.turn = 3 - self.turn
         mate = self.check_mate()
+        self.promoting = False
         if mate == 1:
             return "Stalemate"
         if mate == 2:

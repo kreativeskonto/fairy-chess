@@ -14,7 +14,7 @@ from pygame import Color, Rect
 
 from board import Board
 from pieces import Kind
-from util import BOARD_SIZE, to_coords
+from util import BOARD_SIZE, TIME, to_coords, format_time
 
 PORT = 5398
 BLACK = Color(0, 0, 0)
@@ -54,7 +54,7 @@ class Game:
         pygame.mixer.init()
         pygame.key.set_repeat(500, 40)
 
-        # Configuration
+        # Configuration.
         self.mode = None
         self.size = BOARD_SIZE
         self.theme = THEMES["Chess.com"]
@@ -62,6 +62,7 @@ class Game:
         self.board = Board()
         self.board.setup_file("resources/default_moab.pos")
         self.side = None
+        self.turn = 1
 
         # Window, event and drag state.
         pygame.display.set_caption("Fairy chess")
@@ -76,6 +77,11 @@ class Game:
         self.captures = []
         self.promotions = []
 
+        # Clock.
+        self.white_time = TIME
+        self.black_time = TIME
+        self.last_second = 0
+
         # Piece textures.
         self.textures = {}
         self.load_textures("resources/black")
@@ -83,7 +89,6 @@ class Game:
 
         # Scale-dependent things.
         self.screen_rect: Rect = None
-        self.square_rect: Rect = None
         self.square_rect: Rect = None
         self.title_font = None
         self.body_font = None
@@ -113,12 +118,22 @@ class Game:
         # Determine the size of a screen-filling, slightly padded board with
         # pixel-aligned squares.
         w, h = pygame.display.get_window_size()
-        b = min(w, h) - self.padding
-        b -= b % self.size
-        s = b // self.size
 
         # Rectangle for the whole screen.
         self.screen_rect = Rect(0, 0, w, h)
+
+        # Scaled font.
+        self.title_font = pygame.font.Font(None, min(w, h) // 12)
+        self.body_font = pygame.font.Font(None, min(w, h) // 20)
+
+        # Determine size of board while leaving space for the clock.
+        clock_rect1 = self.text(format_time(self.white_time), pos=(20, 20), center=False, draw=False)
+        clock_rect2 = self.text(format_time(self.black_time), pos=(20, self.screen_rect.height - (20 + clock_rect1.y)), center=False, draw=False)
+
+        b = max(min(w - max(clock_rect1.right, clock_rect2.right) - self.padding, h) - self.padding,
+                min(h - 2 * (clock_rect1.y + self.padding), w) - self.padding)
+        b -= b % self.size
+        s = b // self.size
 
         # Rectangle for the whole board.
         self.board_rect = Rect(0, 0, b, b)
@@ -131,10 +146,6 @@ class Game:
         # Scaled piece textures.
         f = pygame.transform.smoothscale if SMOOTH else pygame.transform.scale
         self.scaled = {k: f(v, (s, s)) for k, v in self.textures.items()}
-
-        # Scaled font.
-        self.title_font = pygame.font.Font(None, b // 12)
-        self.body_font = pygame.font.Font(None, b // 20)
 
     def mainloop(self):
         while True:
@@ -189,6 +200,7 @@ class Game:
 
                 if mode == Mode.LOCAL:
                     self.state = State.INGAME
+                    self.last_second = int(time.time())
 
                 elif mode == Mode.HOST:
                     self.state = State.HOSTMENU
@@ -232,8 +244,22 @@ class Game:
 
     def ingame(self):
         self.mutex.acquire()
+
+        if self.turn == 1:
+            self.white_time -= (int(time.time() - self.last_second))
+        else:
+            self.black_time -= (int(time.time() - self.last_second))
+        if self.last_second != int(time.time()):
+            self.last_second = int(time.time())
+            self.dirty = True
+        clock_rect1 = self.text(format_time(self.black_time), pos=(20, 20), center=False)
+        clock_rect2 = self.text(format_time(self.white_time), pos=(20, self.screen_rect.height - (20 + clock_rect1.y)), center=False)
+        offset_x = 0
+        if self.board_rect.top < clock_rect1.bottom and self.board_rect.left < max(clock_rect1.right, clock_rect2.right) + self.padding:
+            offset_x = max(clock_rect1.right, clock_rect2.right) - self.board_rect.left + self.padding
+
         for sq in range(len(self.board.squares)):
-            self.square(sq)
+            self.square(sq, offset_x)
         self.mutex.release()
 
         if self.dragged:
@@ -245,7 +271,7 @@ class Game:
             if self.mouseup() and not self.board_rect.collidepoint(*pygame.mouse.get_pos()):
                 self.dragged = None
 
-    def square(self, sq):
+    def square(self, sq, offset_x=0, offset_y=0):
         x, y = to_coords(255 - sq if self.side == 2 else sq)
 
         if self.dragged and sq in self.moves:
@@ -259,7 +285,7 @@ class Game:
         else:
             key = "black"
 
-        square = self.square_rect.move(x * self.square_rect.width, -y * self.square_rect.height)
+        square = self.square_rect.move(x * self.square_rect.width + offset_x, -y * self.square_rect.height + offset_y)
         pygame.draw.rect(self.surface, self.theme[key], square)
 
         if square.collidepoint(*pygame.mouse.get_pos()):
@@ -320,7 +346,7 @@ class Game:
         self.surface.blit(bitmap, rect)
         return clicked
 
-    def text(self, text, pos=None, center=True, title=False):
+    def text(self, text, pos=None, center=True, title=False, draw=True):
         flow = pos is None
         if flow:
             pos = self.cursor
@@ -338,7 +364,9 @@ class Game:
         if flow:
             self.cursor[1] += (2.0 if title else 1.5) * rect.height
 
-        self.surface.blit(bitmap, rect)
+        if draw:
+            self.surface.blit(bitmap, rect)
+        return rect
 
     def mouseup(self):
         return self.event.type == pygame.MOUSEBUTTONUP and self.event.button == 1
@@ -364,6 +392,7 @@ class Game:
 
         print(f"Connected to {self.peer_ip}")
         self.state = State.INGAME
+        self.last_second = time.time()
         self.dirty = True
 
         while True:
@@ -382,11 +411,15 @@ class Game:
         if result in ("Stalemate", "Checkmate"):
             print(result)
 
+        if type(result) == list:
+            pass
+
         if result != "Invalid":
             if mocap == "Move":
                 self.move_sound.play()
             elif mocap == "Capture":
                 self.capture_sound.play()
+            self.turn = 3 - self.turn
 
     def lookup_public_ip(self):
         self.public_ip = request.urlopen("https://api.ipify.org").read().decode()
