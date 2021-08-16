@@ -299,7 +299,7 @@ class Game:
             elif self.dragged and self.mouseup():
                 item = (self.dragged.square, sq)
                 feedback = self.board.move(*item)
-                self.handle_feedback(feedback)
+                self.handle_feedback(feedback, sq)
                 if feedback != "Invalid" and self.socket is not None:
                     self.socket.send(bytes(item))
                 self.dragged = None
@@ -403,16 +403,23 @@ class Game:
             feedback = self.board.move(*data)
             self.dirty = True
             self.mutex.release()
-            self.handle_feedback(feedback)
+            self.handle_feedback(feedback, data[0])
 
-    def handle_feedback(self, feedback):
+    def handle_feedback(self, feedback, sq):
         result, mocap = feedback
 
         if result in ("Stalemate", "Checkmate"):
             print(result)
 
         if type(result) == list:
-            pass
+            options = tuple(kind.name for kind in result)
+            while True:
+                choice = input(f"Promote to what? {options} ")
+
+                if choice in options:
+                    kind = Kind[choice]
+                    result = self.board.promote(sq, kind)
+                    break
 
         if result != "Invalid":
             if mocap == "Move":

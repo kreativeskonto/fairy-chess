@@ -209,7 +209,6 @@ class Board:
         return "Valid"
 
 
-
 if __name__ == "__main__":
     board = Board()
     board.setup_file("default_moab.pos")
