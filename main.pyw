@@ -243,8 +243,6 @@ class Game:
         self.text(f"Connecting with {self.peer_ip} " + self.dots(), pos=self.screen_rect.center)
 
     def ingame(self):
-        self.mutex.acquire()
-
         if self.turn == 1:
             self.white_time -= (int(time.time() - self.last_second))
         else:
@@ -258,6 +256,7 @@ class Game:
         if self.board_rect.top < clock_rect1.bottom and self.board_rect.left < max(clock_rect1.right, clock_rect2.right) + self.padding:
             offset_x = max(clock_rect1.right, clock_rect2.right) - self.board_rect.left + self.padding
 
+        self.mutex.acquire()
         for sq in range(len(self.board.squares)):
             self.square(sq, offset_x)
         self.mutex.release()
@@ -297,11 +296,9 @@ class Game:
                     self.promotions = piece.promotion_squares()
 
             elif self.dragged and self.mouseup():
-                item = (self.dragged.square, sq)
-                feedback = self.board.move(*item)
-                self.handle_feedback(feedback, sq)
-                if feedback != "Invalid" and self.socket is not None:
-                    self.socket.send(bytes(item))
+                from_sq = self.dragged.square
+                feedback = self.board.move(from_sq, sq)
+                self.handle_feedback(feedback, from_sq, sq)
                 self.dragged = None
 
         piece = self.board.squares[sq]
@@ -396,29 +393,28 @@ class Game:
         self.dirty = True
 
         while True:
-            data = self.socket.recv(2)
-            assert len(data) == 2
-
+            from_sq, to_sq, promotion = self.socket.recv(3)
             self.mutex.acquire()
-            feedback = self.board.move(*data)
+            feedback = self.board.move(from_sq, to_sq)
+            if promotion != len(Kind) + 1:
+                feedback = self.board.promote(to_sq, list(Kind)[promotion]), feedback[1]
             self.dirty = True
+            self.handle_feedback(feedback, from_sq, to_sq, own=False)
             self.mutex.release()
-            self.handle_feedback(feedback, data[0])
 
-    def handle_feedback(self, feedback, sq):
+    def handle_feedback(self, feedback, from_sq, to_sq, own=True):
         result, mocap = feedback
-
         if result in ("Stalemate", "Checkmate"):
             print(result)
 
-        if type(result) == list:
+        promotion = len(Kind) + 1
+        if own and type(result) == list:
             options = tuple(kind.name for kind in result)
             while True:
-                choice = input(f"Promote to what? {options} ")
-
+                choice = input(f"Promote to what? {options} ").upper()
                 if choice in options:
-                    kind = Kind[choice]
-                    result = self.board.promote(sq, kind)
+                    result = self.board.promote(to_sq, Kind[choice])
+                    promotion = list(Kind).index(Kind[choice])
                     break
 
         if result != "Invalid":
@@ -427,6 +423,9 @@ class Game:
             elif mocap == "Capture":
                 self.capture_sound.play()
             self.turn = 3 - self.turn
+
+            if own and self.socket is not None:
+                self.socket.send(bytes([from_sq, to_sq, promotion]))
 
     def lookup_public_ip(self):
         self.public_ip = request.urlopen("https://api.ipify.org").read().decode()
