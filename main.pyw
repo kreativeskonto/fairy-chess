@@ -63,6 +63,7 @@ class Game:
         self.board.setup_file("resources/default_moab.pos")
         self.side = None
         self.turn = 1
+        self.paused = False
 
         # Window, event and drag state.
         pygame.display.set_caption("Fairy chess")
@@ -171,6 +172,8 @@ class Game:
             self.pressed = True
         elif self.mouseup():
             self.pressed = False
+        elif self.event.type == pygame.KEYDOWN and self.event.key == pygame.K_p and self.side in (None, self.turn):
+            self.pause()
 
         self.surface.fill(self.theme["background"])
         self.cursor = [self.screen_rect.centerx, self.screen_rect.height // 3]
@@ -243,10 +246,11 @@ class Game:
         self.text(f"Connecting with {self.peer_ip} " + self.dots(), pos=self.screen_rect.center)
 
     def ingame(self):
-        if self.turn == 1:
-            self.white_time -= (int(time.time() - self.last_second))
-        else:
-            self.black_time -= (int(time.time() - self.last_second))
+        if not self.paused:
+            if self.turn == 1:
+                self.white_time -= (int(time.time() - self.last_second))
+            else:
+                self.black_time -= (int(time.time() - self.last_second))
         if self.last_second != int(time.time()):
             self.last_second = int(time.time())
             self.dirty = True
@@ -256,10 +260,11 @@ class Game:
         if self.board_rect.top < clock_rect1.bottom and self.board_rect.left < max(clock_rect1.right, clock_rect2.right) + self.padding:
             offset_x = max(clock_rect1.right, clock_rect2.right) - self.board_rect.left + self.padding
 
-        self.mutex.acquire()
-        for sq in range(len(self.board.squares)):
-            self.square(sq, offset_x)
-        self.mutex.release()
+        if not self.paused:
+            self.mutex.acquire()
+            for sq in range(len(self.board.squares)):
+                self.square(sq, offset_x)
+            self.mutex.release()
 
         if self.dragged:
             x, y = pygame.mouse.get_pos()
@@ -393,14 +398,17 @@ class Game:
         self.dirty = True
 
         while True:
-            from_sq, to_sq, promotion = self.socket.recv(3)
-            self.mutex.acquire()
-            feedback = self.board.move(from_sq, to_sq)
-            if promotion != len(Kind) + 1:
-                feedback = self.board.promote(to_sq, list(Kind)[promotion]), feedback[1]
+            pause, from_sq, to_sq, promotion = self.socket.recv(4)
+            if pause == 0:
+                self.mutex.acquire()
+                feedback = self.board.move(from_sq, to_sq)
+                if promotion != len(Kind) + 1:
+                    feedback = self.board.promote(to_sq, list(Kind)[promotion]), feedback[1]
+                self.handle_feedback(feedback, from_sq, to_sq, own=False)
+                self.mutex.release()
+            else:
+                self.pause(send=False)
             self.dirty = True
-            self.handle_feedback(feedback, from_sq, to_sq, own=False)
-            self.mutex.release()
 
     def handle_feedback(self, feedback, from_sq, to_sq, own=True):
         result, mocap = feedback
@@ -425,13 +433,19 @@ class Game:
             self.turn = 3 - self.turn
 
             if own and self.socket is not None:
-                self.socket.send(bytes([from_sq, to_sq, promotion]))
+                self.socket.send(bytes([0, from_sq, to_sq, promotion]))
 
     def lookup_public_ip(self):
         self.public_ip = request.urlopen("https://api.ipify.org").read().decode()
 
     def dots(self):
         return (1 + int(time.time()) % 3) * "."
+
+    def pause(self, send=True):
+        self.dragged = None
+        self.paused = not self.paused
+        if self.socket is not None and send:
+            self.socket.send(bytes([1, 0, 0, 0]))
 
 
 if __name__ == "__main__":
