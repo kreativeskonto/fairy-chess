@@ -11,6 +11,7 @@ class Board:
         self.en_passant = (-1, -1)
         self.move_history = []
         self.promoting = False
+        self.finished = False
 
     def clear(self):
         self.squares = [None] * (self.size ** 2)
@@ -192,6 +193,7 @@ class Board:
                 if piece.side == side:
                     if piece.move_and_capture_squares(self) != (set(), set()):
                         return 0
+        self.finished = True
         if self.in_check(side):
             return 2
         return 1

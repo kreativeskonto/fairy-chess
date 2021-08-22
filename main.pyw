@@ -129,10 +129,10 @@ class Game:
 
         # Determine size of board while leaving space for the clock.
         clock_rect1 = self.text(format_time(self.white_time), pos=(20, 20), center=False, draw=False)
-        clock_rect2 = self.text(format_time(self.black_time), pos=(20, self.screen_rect.height - (20 + clock_rect1.y)), center=False, draw=False)
+        clock_rect2 = self.text(format_time(self.black_time), pos=(20, self.screen_rect.height - (20 + clock_rect1.height)), center=False, draw=False)
 
         b = max(min(w - max(clock_rect1.right, clock_rect2.right) - self.padding, h) - self.padding,
-                min(h - 2 * (clock_rect1.y + self.padding), w) - self.padding)
+                min(h - 2 * (clock_rect1.height + self.padding), w) - self.padding)
         b -= b % self.size
         s = b // self.size
 
@@ -246,17 +246,20 @@ class Game:
         self.text(f"Connecting with {self.peer_ip} " + self.dots(), pos=self.screen_rect.center)
 
     def ingame(self):
-        if not self.paused:
+        if not self.board.finished and not self.paused:
             if self.turn == 1:
                 self.white_time -= (int(time.time() - self.last_second))
             else:
                 self.black_time -= (int(time.time() - self.last_second))
+
         if self.last_second != int(time.time()):
             self.last_second = int(time.time())
             self.dirty = True
+
         clock_rect1 = self.text(format_time(self.black_time if self.side != 2 else self.white_time), pos=(20, 20), center=False)
-        clock_rect2 = self.text(format_time(self.white_time if self.side != 2 else self.black_time), pos=(20, self.screen_rect.height - (20 + clock_rect1.y)), center=False)
+        clock_rect2 = self.text(format_time(self.white_time if self.side != 2 else self.black_time), pos=(20, self.screen_rect.height - (20 + clock_rect1.height)), center=False)
         offset_x = 0
+
         if self.board_rect.top < clock_rect1.bottom and self.board_rect.left < max(clock_rect1.right, clock_rect2.right) + self.padding:
             offset_x = max(clock_rect1.right, clock_rect2.right) - self.board_rect.left + self.padding
 
