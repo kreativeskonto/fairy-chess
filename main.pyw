@@ -13,7 +13,7 @@ import pygame
 from pygame import Color, Rect
 
 from board import Board
-from pieces import Kind
+from pieces import Kind, Piece
 from util import BOARD_SIZE, TIME, to_coords, format_time
 
 PORT = 5398
@@ -29,7 +29,8 @@ THEMES = {
         "move": Color("#baca2b"),
         "capture": Color("#ec7e6a"),
         "promotion": Color("#00d5ff"),
-        "last_squares": Color("#fadf11")
+        "last_squares": Color("#fadf11"),
+        "popup": Color("#c29f76"),
     }
 }
 
@@ -74,6 +75,7 @@ class Game:
         self.pressed = False
         self.cursor = [0, 0]
         self.dragged = None
+        self.promoting = None
         self.moves = []
         self.captures = []
         self.promotions = []
@@ -81,7 +83,7 @@ class Game:
         # Clock.
         self.white_time = TIME
         self.black_time = TIME
-        self.last_second = 0
+        self.last_second = time.time()
 
         # Piece textures.
         self.textures = {}
@@ -275,6 +277,9 @@ class Game:
                 self.square(sq, offset_x)
             self.mutex.release()
 
+        if self.promoting is not None:
+            self.promotion_popup()
+
         if self.dragged:
             x, y = pygame.mouse.get_pos()
             x -= self.square_rect.width // 2
@@ -301,7 +306,7 @@ class Game:
         square = self.square_rect.move(x * self.square_rect.width + offset_x, -y * self.square_rect.height + offset_y)
         pygame.draw.rect(self.surface, self.theme[key], square)
 
-        if square.collidepoint(*pygame.mouse.get_pos()):
+        if self.promoting is None and square.collidepoint(*pygame.mouse.get_pos()):
             if self.mousedown():
                 piece = self.board.squares[sq]
                 if piece and (self.side is None or piece.side == self.side):
@@ -330,9 +335,35 @@ class Game:
             temp.set_alpha(180)
             self.surface.blit(temp, square)
 
-    def piece(self, piece, pos):
+    def promotion_popup(self):
+        from_sq, to_sq, choices = self.promoting
+
+        square = self.square_rect.copy()
+        square.center = self.screen_rect.center
+        square.x -= ((len(choices) - 1) * self.square_rect.width) // 2
+
+        popup = Rect(0, 0, len(choices) * self.square_rect.width, self.square_rect.height)
+        padding = square.width // 4
+        popup.inflate_ip(padding, padding)
+        popup.center = self.screen_rect.center
+
+        pygame.draw.rect(self.surface, self.theme["popup"], popup)
+
+        for choice in choices:
+            alpha = 255
+            if square.collidepoint(*pygame.mouse.get_pos()):
+                alpha = 150 if self.pressed else 200
+                if self.mouseup():
+                    feedback = self.board.promote(to_sq, choice), None
+                    self.handle_feedback(feedback, from_sq, to_sq, promotion=choice)
+
+            self.piece(Piece(self.turn, choice), square, alpha)
+            square.x += self.square_rect.width
+
+    def piece(self, piece, pos, alpha=255):
         try:
             bitmap = self.scaled[piece.side, piece.kind]
+            bitmap.set_alpha(alpha)
             self.surface.blit(bitmap, pos)
         except KeyError:
             pass
@@ -413,7 +444,7 @@ class Game:
             if pause == 0:
                 self.mutex.acquire()
                 feedback = self.board.move(from_sq, to_sq)
-                if promotion != len(Kind) + 1:
+                if promotion < len(Kind):
                     feedback = self.board.promote(to_sq, list(Kind)[promotion]), feedback[1]
                 self.handle_feedback(feedback, from_sq, to_sq, own=False)
                 self.mutex.release()
@@ -421,30 +452,29 @@ class Game:
                 self.pause(send=False)
             self.dirty = True
 
-    def handle_feedback(self, feedback, from_sq, to_sq, own=True):
+    def handle_feedback(self, feedback, from_sq, to_sq, promotion=None, own=True):
         result, mocap = feedback
+        if result == "Invalid":
+            return
+
         if result in ("Stalemate", "Checkmate"):
             print(result)
 
-        promotion = len(Kind) + 1
+        if mocap == "Move":
+            self.move_sound.play()
+        elif mocap == "Capture":
+            self.capture_sound.play()
+
         if own and type(result) == list:
-            options = tuple(kind.name for kind in result)
-            while True:
-                choice = input(f"Promote to what? {options} ").upper()
-                if choice in options:
-                    result = self.board.promote(to_sq, Kind[choice])
-                    promotion = list(Kind).index(Kind[choice])
-                    break
+            self.promoting = from_sq, to_sq, result
+            return
 
-        if result != "Invalid":
-            if mocap == "Move":
-                self.move_sound.play()
-            elif mocap == "Capture":
-                self.capture_sound.play()
-            self.turn = 3 - self.turn
+        self.turn = 3 - self.turn
+        self.promoting = None
 
-            if own and self.socket is not None:
-                self.socket.send(bytes([0, from_sq, to_sq, promotion]))
+        if own and self.socket is not None:
+            promotion = len(Kind) if promotion is None else list(Kind).index(promotion)
+            self.socket.send(bytes([0, from_sq, to_sq, promotion]))
 
     def lookup_public_ip(self):
         self.public_ip = request.urlopen("https://api.ipify.org").read().decode()
