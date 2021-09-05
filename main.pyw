@@ -161,6 +161,7 @@ class Game:
                 self.event = event
                 self.refresh()
 
+            self.event = pygame.event.Event(pygame.NOEVENT)
             self.refresh()
 
     def refresh(self):
@@ -213,12 +214,17 @@ class Game:
 
                 elif mode == Mode.JOIN:
                     self.state = State.JOINMENU
-                    self.side = 2
 
     def hostmenu(self):
         self.text("Hosting game", title=True)
         self.text(f"Your local IP is {self.local_ip}")
         self.text(f"Your public IP is {self.public_ip}" if self.public_ip else "")
+        self.text("")
+
+        color = "white" if self.side == 1 else "black"
+        if self.button(f"Playing as {color}."):
+            self.side = 3 - self.side
+
         self.text("")
         self.text(f"Waiting for opponent " + self.dots())
 
@@ -298,7 +304,7 @@ class Game:
         if square.collidepoint(*pygame.mouse.get_pos()):
             if self.mousedown():
                 piece = self.board.squares[sq]
-                if piece and (self.mode == Mode.LOCAL or piece.side == self.side):
+                if piece and (self.side is None or piece.side == self.side):
                     self.dragged = piece
                     self.moves, self.captures = piece.move_and_capture_squares(self.board, check_side=True)
                     self.promotions = piece.promotion_squares()
@@ -389,11 +395,13 @@ class Game:
         if self.peer_ip:
             print(f"Connecting to {self.peer_ip}")
             self.socket.connect((self.peer_ip, PORT))
+            self.side, = self.socket.recv(1)
         else:
             print(f"Listening for incoming connections")
             self.socket.bind((self.local_ip, PORT))
             self.socket.listen(1)
             self.socket, (self.peer_ip, _) = self.socket.accept()
+            self.socket.send(bytes([3 - self.side]))
 
         print(f"Connected to {self.peer_ip}")
         self.state = State.INGAME
