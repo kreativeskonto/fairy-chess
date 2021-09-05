@@ -12,12 +12,10 @@ def to_square(xy):
 
 
 def format_time(secs):
-    hrs = secs // 3600
-    mins = (secs % 3600) // 60
-    mins = "0" + str(mins) if mins < 10 else str(mins)
-    secs = secs % 60
-    secs = "0" + str(secs) if secs < 10 else str(secs)
-    return f"{hrs}:{mins}:{secs}" if hrs > 0 else f"{mins}:{secs}"
+    prefix = '-' if secs < 0 else ''
+    mins = abs(secs) // 60
+    secs = abs(secs) % 60
+    return f"{prefix}{mins:02d}:{secs:02d}"
 
 DIR_NORTH = (BOARD_SIZE, None)
 DIR_NORTHWEST = (BOARD_SIZE - 1, 0)
