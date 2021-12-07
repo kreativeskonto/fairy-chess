@@ -1,90 +1,100 @@
-PAWN
-Can advance one or two squares without capturing. Can move one square forward diagonally to capture only.
-Can capture other pawns en passant: When an enemy pawn advances two squares and ends up to to the left or right of your pawn,
+Pawn
+Can advance one or two squares without capturing.
+Can move one square forward diagonally to capture only.
+Can capture other pawns en passant:
+When an enemy pawn advances two squares and ends up to to the left or right of your pawn,
 your pawn can take that enemy pawn as if it had advanced only one square.
 This special capture can only be done during the first turn it is possible.
 A pawn reaching the last row of the board is promoted to a unicorn.
 
-KNIGHT
+King
+Can jump to any square within a 3x3 region centered on it.
+If the king can be captured, you are in check. Any move that would leave you in check is illegal.
+If you are in check and have no legal move, you lose the game.
+
+Knight
 Can move to the opposite corner of a 2x3 or 3x2 rectangle, jumping over any pieces in its way.
 This way, the knight always changes the color of the square it stands on when moving.
 
-BISHOP
+Bishop
 Can move in any diagonal direction until a piece or the rim of the board stops it.
 This way, the bishop never leaves the color of the square it stands on.
 
-ROOK
+Rook
 Can move in any orthogonal direction until a piece or the rim of the board stops it.
 
-QUEEN
+Queen
 Can move in any direction until a piece or the rim of the board stops it.
 The queen combines the powers of the rook and the bishop.
 
-ELEPHANT
+Elephant
 Can move one or two squares diagonally. When moving two squares, it may jump to reach its destination.
 This way, the elephant never leaves the color of the square it stands on.
 
-MACHINE
+Machine
 Can move one or two squares orthogonally. When moving two squares, it may jump to reach its destination.
 
-SHIP
-Can move one square diagonally and then up or down, away from its position, until a piece or the rim of the board stops it.
+Ship
+Can move one square diagonally and then up or down, away from its position,
+until a piece or the rim of the board stops it.
 
-BUFFOON
+Buffoon
 Can move one square in any direction, like a king, without being hindered by check.
 A buffoon reaching the first row on the opponent's side of the board promotes to a queen.
 
-LEGIONNAIRE
-Can advance one or two squares without capturing. Can move one square forward diagonally, allowing it to capture.
-Can capture other pawns and legionnaires en passant: When an enemy pawn or legionnaire advances two squares and ends up to to the left or right of your legionnaire,
-your legionnaire can take that enemy piece as if it had advanced only one square.
+Centurion
+Can advance one or two squares without capturing.
+Can move one square forward diagonally, allowing it to capture.
+Can capture other pawns and centurion en passant: When an enemy pawn or centurion advances
+two squares and ends up to to the left or right of your centurion,
+your centurion can take that enemy piece as if it had advanced only one square.
 This special capture can only be done during the first turn it is possible.
-A legionnaire reaching the last row of the board is promoted to your choice of a queen, lion or gryphon.
+A centurion reaching the last row of the board is promoted to your choice of a queen, lion or gryphon.
 
-LION
+Lion
 Can jump to any square within a 5x5 region centered on it.
 The lion combines the powers of the elephant, machine and knight.
 
-GRYPHON
+Gryphon
 Can move one square diagonally and then orthogonally away until a piece or the rim of the board stops it.
 
-ANTELOPE
+Antelope
 Can move two or three squares in any direction, jumping over any pieces in its way.
 
-CAMEL
+Camel
 Can jump to the opposite corner of a 2x4 or 4x2 rectangle, jumping over any pieces in it way.
 This way, the camel never leaves the color of the square it stands on.
 
-BOW
+Bow
 Can move diagonally like a bishop without capturing.
-To capture an enemy piece, the bow also moves in a diagonal direction but has to jump over exactly one piece.
+To capture an enemy piece, the bow also moves diagonally but has to jump over exactly one piece.
 This way, the bow never leaves the color of the square it stands on.
 
-BULL
+Bull
 Can jump to the opposite corner of a 3x4 or 4x3 rectangle, jumping over any pieces in it way.
 This way, the bull always changes the color of the square it stands on when moving.
 
-CANNON
+Cannon
 Can move orthogonally like a rook without capturing.
-To capture an enemy piece, the cannon also moves in an orthogonal direction but has to jump over exactly one piece.
+To capture an enemy piece, the cannon also moves orthogonally but has to jump over exactly one piece.
 
-BUFFALO
-Can jump to the opposite corner of a 2x3, 3x2, 2x4, 4x2, 3x4 or 4x3 rectangle, jumping over any pieces in it way.
+Buffalo
+Can jump to the opposite corner of a 2x3, 3x2, 2x4, 4x2, 3x4 or 4x3 rectangle, ignoring pieces in its way.
 The buffalo combines the powers of the knight, camel and bull.
 
-RHINOCEROS
+Rhinoceros
 Jumps like a knight and then moves diagonally away until a piece or the rim of the board stops it.
-This way, the bull always changes the color of the square it stands on when moving.
+This way, the rhinoceros always changes the color of the square it stands on when moving.
 
-STAR
+Star
 Can move in any direction without capturing, like a queen.
 To capture an enemy piece, the star also moves like a queen but has to jump over exactly one piece.
 
-UNICORN
+Unicorn
 Can move in any direction like a queen or to the opposite corner of a 2x3 or 3x2 rectangle like a knight.
 
-DRAGONWOMAN
-Can move in orthogonally like a rook or to the opposite corner of a 2x3 or 3x2 rectangle like a knight.
+Dragonwoman
+Can move orthogonally like a rook or to the opposite corner of a 2x3 or 3x2 rectangle like a knight.
 
-DIABLO
+Diablo
 Can move diagonally like a bishop or to the opposite corner of a 2x3 or 3x2 rectangle like a knight.

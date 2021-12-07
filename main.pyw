@@ -90,6 +90,23 @@ class Game:
         self.load_textures("resources/black")
         self.load_textures("resources/white")
 
+        # Tooltips.
+        self.tooltip_piece = None
+        self.tooltips = dict()
+        with open("resources/tooltips.txt") as file:
+            content = file.readlines()
+        i = 0
+        while i < len(content):
+            print(i)
+            key = content[i][:-1]
+            tup = tuple()
+            i += 1
+            while i < len(content) and content[i] != "\n":
+                tup += (content[i][:-1],)
+                i += 1
+            self.tooltips[key] = tup
+            i += 1
+
         # Scale-dependent things.
         self.screen_rect: Rect = None
         self.square_rect: Rect = None
@@ -128,6 +145,7 @@ class Game:
         # Scaled font.
         self.title_font = pygame.font.Font(None, min(w, h) // 12)
         self.body_font = pygame.font.Font(None, min(w, h) // 20)
+        self.tooltip_font = pygame.font.Font(None, min(w // 36, h // 20))
 
         # Determine size of board while leaving space for the clock.
         clock_rect1 = self.text(format_time(self.white_time), pos=(20, 20), center=False, draw=False)
@@ -141,6 +159,12 @@ class Game:
         # Rectangle for the whole board.
         self.board_rect = Rect(0, 0, b, b)
         self.board_rect.center = w / 2, h / 2
+
+        # Calculating horizontal offset of board due to leaving space for the clock.
+        self.offset_x = 0
+        if self.board_rect.top < clock_rect1.bottom and self.board_rect.left < max(clock_rect1.right, clock_rect2.right) + self.padding:
+            self.offset_x = max(clock_rect1.right, clock_rect2.right) - self.board_rect.left + self.padding
+            self.board_rect.center = w / 2 + self.offset_x, h / 2
 
         # Rectangle for the first square.
         self.square_rect = Rect(0, 0, s, s)
@@ -265,17 +289,15 @@ class Game:
             self.dirty = True
 
         clock_rect1 = self.text(format_time(self.black_time if self.side != 2 else self.white_time), pos=(20, 20), center=False)
-        clock_rect2 = self.text(format_time(self.white_time if self.side != 2 else self.black_time), pos=(20, self.screen_rect.height - (20 + clock_rect1.height)), center=False)
-        offset_x = 0
-
-        if self.board_rect.top < clock_rect1.bottom and self.board_rect.left < max(clock_rect1.right, clock_rect2.right) + self.padding:
-            offset_x = max(clock_rect1.right, clock_rect2.right) - self.board_rect.left + self.padding
+        self.text(format_time(self.white_time if self.side != 2 else self.black_time), pos=(20, self.screen_rect.height - (20 + clock_rect1.height)), center=False)
 
         if not self.paused:
             self.mutex.acquire()
             for sq in range(len(self.board.squares)):
-                self.square(sq, offset_x)
+                self.square(sq)
             self.mutex.release()
+            if self.tooltip_piece:
+                self.draw_tooltip()
 
         if self.promoting is not None:
             self.promotion_popup()
@@ -289,7 +311,7 @@ class Game:
             if self.mouseup() and not self.board_rect.collidepoint(*pygame.mouse.get_pos()):
                 self.dragged = None
 
-    def square(self, sq, offset_x=0, offset_y=0):
+    def square(self, sq):
         x, y = to_coords(255 - sq if self.side == 2 else sq)
 
         if self.dragged and sq in self.moves:
@@ -303,10 +325,19 @@ class Game:
         else:
             key = "black"
 
-        square = self.square_rect.move(x * self.square_rect.width + offset_x, -y * self.square_rect.height + offset_y)
+        square = self.square_rect.move(x * self.square_rect.width, -y * self.square_rect.height)
         pygame.draw.rect(self.surface, self.theme[key], square)
 
         if self.promoting is None and square.collidepoint(*pygame.mouse.get_pos()):
+
+            if self.right_mousedown():
+                piece = self.board.squares[sq]
+                if piece:
+                    self.tooltip_piece = piece
+
+            elif self.right_mouseup():
+                self.tooltip_piece = None
+
             if self.mousedown():
                 piece = self.board.squares[sq]
                 if piece and (self.side is None or piece.side == self.side):
@@ -339,13 +370,13 @@ class Game:
         from_sq, to_sq, choices = self.promoting
 
         square = self.square_rect.copy()
-        square.center = self.screen_rect.center
+        square.center = self.board_rect.center
         square.x -= ((len(choices) - 1) * self.square_rect.width) // 2
 
         popup = Rect(0, 0, len(choices) * self.square_rect.width, self.square_rect.height)
         padding = square.width // 4
         popup.inflate_ip(padding, padding)
-        popup.center = self.screen_rect.center
+        popup.center = self.board_rect.center
 
         pygame.draw.rect(self.surface, self.theme["popup"], popup)
 
@@ -388,12 +419,12 @@ class Game:
         self.surface.blit(bitmap, rect)
         return clicked
 
-    def text(self, text, pos=None, center=True, title=False, draw=True):
+    def text(self, text, pos=None, center=True, title=False, draw=True, tooltip=False):
         flow = pos is None
         if flow:
             pos = self.cursor
 
-        font = self.title_font if title else self.body_font
+        font = self.title_font if title else self.tooltip_font if tooltip else self.body_font  # das tut mir leid
         font.underline = title
         bitmap = font.render(text, True, self.theme["text"])
 
@@ -415,6 +446,12 @@ class Game:
 
     def mousedown(self):
         return self.event.type == pygame.MOUSEBUTTONDOWN and self.event.button == 1
+
+    def right_mouseup(self):
+        return self.event.type == pygame.MOUSEBUTTONUP and self.event.button == 3
+
+    def right_mousedown(self):
+        return self.event.type == pygame.MOUSEBUTTONDOWN and self.event.button == 3
 
     def enter(self):
         return self.event.type == pygame.KEYDOWN and self.event.key == pygame.K_RETURN
@@ -487,6 +524,20 @@ class Game:
         self.paused = not self.paused
         if self.socket is not None and send:
             self.socket.send(bytes([1, 0, 0, 0]))
+
+    def draw_tooltip(self):
+        piece = self.tooltip_piece
+        w = self.board_rect.width
+        h = len(self.tooltips[piece.kind.value]) * self.square_rect.height
+
+        tooltip = Rect(0, 0, w, h)
+        padding = self.square_rect.width // 4
+        tooltip.inflate_ip(padding, padding)
+        tooltip.center = self.board_rect.center
+        pygame.draw.rect(self.surface, self.theme["background"], tooltip)
+
+        for i, line in enumerate(self.tooltips[piece.kind.value]):
+            self.text(line, pos=(self.screen_rect.centerx, tooltip.top + (i + 0.5) * self.square_rect.height), tooltip=True)
 
 
 if __name__ == "__main__":
