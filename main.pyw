@@ -97,7 +97,6 @@ class Game:
             content = file.readlines()
         i = 0
         while i < len(content):
-            print(i)
             key = content[i][:-1]
             tup = tuple()
             i += 1
@@ -526,18 +525,22 @@ class Game:
             self.socket.send(bytes([1, 0, 0, 0]))
 
     def draw_tooltip(self):
+        line_height = min(self.screen_rect.width // 36, self.screen_rect.height // 20)
+
         piece = self.tooltip_piece
         w = self.board_rect.width
-        h = len(self.tooltips[piece.kind.value]) * self.square_rect.height
+        h = len(self.tooltips[piece.kind.value]) * line_height
 
         tooltip = Rect(0, 0, w, h)
-        padding = self.square_rect.width // 4
+        padding = self.square_rect.width // 2
         tooltip.inflate_ip(padding, padding)
         tooltip.center = self.board_rect.center
         pygame.draw.rect(self.surface, self.theme["background"], tooltip)
 
         for i, line in enumerate(self.tooltips[piece.kind.value]):
-            self.text(line, pos=(self.screen_rect.centerx, tooltip.top + (i + 0.5) * self.square_rect.height), tooltip=True)
+            x = self.screen_rect.centerx
+            y = tooltip.top + padding // 2 + (i + 0.5) * line_height
+            self.text(line, pos=(x, y), tooltip=True)
 
 
 if __name__ == "__main__":
