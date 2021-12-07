@@ -65,6 +65,7 @@ class Game:
         self.side = None
         self.turn = 1
         self.paused = False
+        self.result = None
 
         # Window, event and drag state.
         pygame.display.set_caption("Fairy chess")
@@ -295,7 +296,7 @@ class Game:
             for sq in range(len(self.board.squares)):
                 self.square(sq)
             self.mutex.release()
-            if self.tooltip_piece:
+            if self.tooltip_piece or self.result is not None:
                 self.draw_tooltip()
 
         if self.promoting is not None:
@@ -328,7 +329,6 @@ class Game:
         pygame.draw.rect(self.surface, self.theme[key], square)
 
         if self.promoting is None and square.collidepoint(*pygame.mouse.get_pos()):
-
             if self.right_mousedown():
                 piece = self.board.squares[sq]
                 if piece:
@@ -493,8 +493,12 @@ class Game:
         if result == "Invalid":
             return
 
-        if result in ("Stalemate", "Checkmate"):
-            print(result)
+        if result == "Stalemate":
+            self.result = result + "."
+
+        if result == "Checkmate":
+            side = "White" if self.turn == 1 else "Black"
+            self.result = f"Checkmate. {side} wins."
 
         if mocap == "Move":
             self.move_sound.play()
@@ -525,11 +529,14 @@ class Game:
             self.socket.send(bytes([1, 0, 0, 0]))
 
     def draw_tooltip(self):
-        line_height = min(self.screen_rect.width // 36, self.screen_rect.height // 20)
+        if self.tooltip_piece:
+            lines = self.tooltips[self.tooltip_piece.kind.value]
+        elif self.result is not None:
+            lines = [self.result]
 
-        piece = self.tooltip_piece
+        line_height = min(self.screen_rect.width // 36, self.screen_rect.height // 20)
         w = self.board_rect.width
-        h = len(self.tooltips[piece.kind.value]) * line_height
+        h = len(lines) * line_height
 
         tooltip = Rect(0, 0, w, h)
         padding = self.square_rect.width // 2
@@ -537,7 +544,7 @@ class Game:
         tooltip.center = self.board_rect.center
         pygame.draw.rect(self.surface, self.theme["background"], tooltip)
 
-        for i, line in enumerate(self.tooltips[piece.kind.value]):
+        for i, line in enumerate(lines):
             x = self.screen_rect.centerx
             y = tooltip.top + padding // 2 + (i + 0.5) * line_height
             self.text(line, pos=(x, y), tooltip=True)
