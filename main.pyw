@@ -95,16 +95,16 @@ class Game:
         self.tooltip_piece = None
         self.tooltips = dict()
         with open("resources/tooltips.txt") as file:
-            content = file.readlines()
+            content = [line[:-1] for line in file.readlines()]
         i = 0
         while i < len(content):
-            key = content[i][:-1]
-            tup = tuple()
-            i += 1
-            while i < len(content) and content[i] != "\n":
-                tup += (content[i][:-1],)
+            key = content[i]
+            tooltip = [f"{key} ({content[i+1]})"]
+            i += 2
+            while i < len(content) and content[i] != "":
+                tooltip.append(content[i])
                 i += 1
-            self.tooltips[key] = tup
+            self.tooltips[key] = tooltip
             i += 1
 
         # Scale-dependent things.
