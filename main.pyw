@@ -47,6 +47,11 @@ class Mode(Enum):
     HOST = "Host network game"
     JOIN = "Join network game"
 
+class TextStyle(Enum):
+    TITLE = "Title"
+    BUTTON = "Button"
+    TOOLTIP = "Tooltip"
+
 
 class Game:
     def __init__(self):
@@ -94,12 +99,15 @@ class Game:
         # Tooltips.
         self.tooltip_piece = None
         self.tooltips = dict()
+        self.worths = dict()
         with open("resources/tooltips.txt") as file:
             content = [line[:-1] for line in file.readlines()]
         i = 0
         while i < len(content):
             key = content[i]
-            tooltip = [f"{key} ({content[i+1]})"]
+            worth = content[i+1]
+            self.worths[key] = int(worth)
+            tooltip = [f"{key} ({worth})" if worth != "0" else key]
             i += 2
             while i < len(content) and content[i] != "":
                 tooltip.append(content[i])
@@ -112,6 +120,7 @@ class Game:
         self.square_rect: Rect = None
         self.title_font = None
         self.body_font = None
+        self.tooltip_font = None
         self.scaled = {}
         self.resize()
 
@@ -143,13 +152,13 @@ class Game:
         self.screen_rect = Rect(0, 0, w, h)
 
         # Scaled font.
-        self.title_font = pygame.font.Font(None, min(w, h) // 12)
-        self.body_font = pygame.font.Font(None, min(w, h) // 20)
-        self.tooltip_font = pygame.font.Font(None, min(w // 36, h // 20))
+        self.title_font = pygame.font.Font("resources/title.ttf", min(w, h) // 12)
+        self.body_font = pygame.font.Font("resources/title.ttf", min(w, h) // 20)
+        self.tooltip_font = pygame.font.Font("resources/font.ttf", min(w // 40, h // 28))
 
         # Determine size of board while leaving space for the clock.
-        clock_rect1 = self.text(format_time(self.white_time), pos=(20, 20), center=False, draw=False)
-        clock_rect2 = self.text(format_time(self.black_time), pos=(20, self.screen_rect.height - (20 + clock_rect1.height)), center=False, draw=False)
+        clock_rect1 = self.text(format_time(self.white_time), pos=(20, 20), align=(-1, -1), draw=False)
+        clock_rect2 = self.text(format_time(self.black_time), pos=(20, self.screen_rect.height - 20), align=(-1, 1), draw=False)
 
         b = max(min(w - max(clock_rect1.right, clock_rect2.right) - self.padding, h) - self.padding,
                 min(h - 2 * (clock_rect1.height + self.padding), w) - self.padding)
@@ -209,6 +218,7 @@ class Game:
             self.mainmenu()
 
         elif self.state == State.HOSTMENU:
+            self.cursor = [self.screen_rect.centerx, self.screen_rect.height // 4]
             self.hostmenu()
 
         elif self.state == State.JOINMENU:
@@ -223,7 +233,7 @@ class Game:
         pygame.display.update()
 
     def mainmenu(self):
-        self.text("Fairy chess", title=True)
+        self.text("Fairy chess", style=TextStyle.TITLE)
         for mode in Mode:
             if self.button(mode.value):
                 self.mode = mode
@@ -242,7 +252,7 @@ class Game:
                     self.state = State.JOINMENU
 
     def hostmenu(self):
-        self.text("Hosting game", title=True)
+        self.text("Hosting game", style=TextStyle.TITLE)
         self.text(f"Your local IP is {self.local_ip}")
         self.text(f"Your public IP is {self.public_ip}" if self.public_ip else "")
         self.text("")
@@ -263,7 +273,7 @@ class Game:
                 if value in "0123456789ABCDEF.:":
                     self.peer_ip += value
 
-        self.text("Joining game", title=True)
+        self.text("Joining game", style=TextStyle.TITLE)
         self.text("Please enter the IP you want to connect with:")
         self.text(self.peer_ip)
         self.text("")
@@ -288,8 +298,24 @@ class Game:
             self.last_second = int(time.time())
             self.dirty = True
 
-        clock_rect1 = self.text(format_time(self.black_time if self.side != 2 else self.white_time), pos=(20, 20), center=False)
-        self.text(format_time(self.white_time if self.side != 2 else self.black_time), pos=(20, self.screen_rect.height - (20 + clock_rect1.height)), center=False)
+        clock_rect1 = self.text(format_time(self.black_time if self.side != 2 else self.white_time), pos=(20, 20), align=(-1, -1))
+        clock_rect2 = self.text(format_time(self.white_time if self.side != 2 else self.black_time), pos=(20, self.screen_rect.height - 20), align=(-1, 1))
+
+        worth1 = 0
+        worth2 = 0
+        for sq in range(len(self.board.squares)):
+            piece = self.board.squares[sq]
+            if piece and piece.side == (1 if self.side == 2 else 2):
+                worth1 += self.worths[piece.kind.value]
+            if piece and piece.side == (2 if self.side == 2 else 1):
+                worth2 += self.worths[piece.kind.value]
+
+        if self.board_rect.left < clock_rect1.right:
+            self.text(f"[{worth1}]", pos=(self.screen_rect.w - 20, 20), align=(1, -1))
+            self.text(f"[{worth2}]", pos=(self.screen_rect.w - 20, clock_rect2.top), align=(1, -1))
+        else:
+            self.text(f"[{worth1}]", pos=(20, clock_rect1.bottom + 20), align=(-1, -1))
+            self.text(f"[{worth2}]", pos=(20, clock_rect2.top - 20), align=(-1, 1))
 
         if not self.paused:
             self.mutex.acquire()
@@ -418,23 +444,24 @@ class Game:
         self.surface.blit(bitmap, rect)
         return clicked
 
-    def text(self, text, pos=None, center=True, title=False, draw=True, tooltip=False):
+    def text(self, text, pos=None, align=(0, 0), style=TextStyle.BUTTON, draw=True):
         flow = pos is None
         if flow:
             pos = self.cursor
 
-        font = self.title_font if title else self.tooltip_font if tooltip else self.body_font  # das tut mir leid
-        font.underline = title
+        font = {
+            TextStyle.TITLE: self.title_font,
+            TextStyle.BUTTON: self.body_font,
+            TextStyle.TOOLTIP: self.tooltip_font
+        }[style]
         bitmap = font.render(text, True, self.theme["text"])
 
         rect = bitmap.get_rect()
-        if center:
-            rect.center = pos
-        else:
-            rect.topleft = pos
+
+        rect.center = (pos[0] - align[0] * rect.w / 2, pos[1] - align[1] * rect.h / 2)
 
         if flow:
-            self.cursor[1] += (2.0 if title else 1.5) * rect.height
+            self.cursor[1] += (1.6 if style == TextStyle.TITLE else 1.2) * rect.height
 
         if draw:
             self.surface.blit(bitmap, rect)
@@ -529,25 +556,24 @@ class Game:
             self.socket.send(bytes([1, 0, 0, 0]))
 
     def draw_tooltip(self):
+        lines = []
         if self.tooltip_piece:
             lines = self.tooltips[self.tooltip_piece.kind.value]
         elif self.result is not None:
             lines = [self.result]
 
-        line_height = min(self.screen_rect.width // 36, self.screen_rect.height // 20)
+        line_height = self.tooltip_font.get_height()
         w = self.board_rect.width
-        h = len(lines) * line_height
+        h = len(lines) * line_height + line_height
 
         tooltip = Rect(0, 0, w, h)
-        padding = self.square_rect.width // 2
-        tooltip.inflate_ip(padding, padding)
         tooltip.center = self.board_rect.center
         pygame.draw.rect(self.surface, self.theme["background"], tooltip)
 
         for i, line in enumerate(lines):
             x = self.screen_rect.centerx
-            y = tooltip.top + padding // 2 + (i + 0.5) * line_height
-            self.text(line, pos=(x, y), tooltip=True)
+            y = self.screen_rect.centery - ((len(lines) - 0.7) * line_height // 2) + i * line_height
+            self.text(line, pos=(x, y), style=TextStyle.TOOLTIP)
 
 
 if __name__ == "__main__":

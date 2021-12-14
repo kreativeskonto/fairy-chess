@@ -10,7 +10,7 @@ A pawn reaching the last row of the board is promoted to a unicorn.
 
 King
 0
-Can jump to any square within a 3x3 region centered on it.
+Can move one square in any direction.
 If the king can be captured, you are in check. Any move that would leave you in check is illegal.
 If you are in check and have no legal move, you lose the game.
 
