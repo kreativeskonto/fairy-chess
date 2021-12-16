@@ -31,6 +31,8 @@ THEMES = {
         "promotion": Color("#00d5ff"),
         "last_squares": Color("#fadf11"),
         "popup": Color("#c29f76"),
+        "advantage": Color("#76ff40"),
+        "disadvantage": Color("#ff4d40")
     }
 }
 
@@ -313,9 +315,15 @@ class Game:
         if self.board_rect.left < clock_rect1.right:
             self.text(f"[{worth1}]", pos=(self.screen_rect.w - 20, 20), align=(1, -1))
             self.text(f"[{worth2}]", pos=(self.screen_rect.w - 20, clock_rect2.top), align=(1, -1))
+            diff = worth2 - worth1
+            self.text(f"{'+' if diff > 0 else ''}{'=' if diff == 0 else diff}", pos=(self.screen_rect.centerx, clock_rect2.top), align=(0, -1),
+                      theme="advantage" if diff > 0 else "disadvantage" if diff < 0 else "text")
         else:
             self.text(f"[{worth1}]", pos=(20, clock_rect1.bottom + 20), align=(-1, -1))
             self.text(f"[{worth2}]", pos=(20, clock_rect2.top - 20), align=(-1, 1))
+            diff = worth2 - worth1
+            self.text(f"{'+' if diff > 0 else ''}{'=' if diff == 0 else diff}", pos=(20, self.screen_rect.centery), align=(-1, 0),
+                      theme="advantage" if diff > 0 else "disadvantage" if diff < 0 else "text")
 
         if not self.paused:
             self.mutex.acquire()
@@ -444,7 +452,7 @@ class Game:
         self.surface.blit(bitmap, rect)
         return clicked
 
-    def text(self, text, pos=None, align=(0, 0), style=TextStyle.BUTTON, draw=True):
+    def text(self, text, pos=None, align=(0, 0), style=TextStyle.BUTTON, draw=True, theme="text"):
         flow = pos is None
         if flow:
             pos = self.cursor
@@ -454,7 +462,7 @@ class Game:
             TextStyle.BUTTON: self.body_font,
             TextStyle.TOOLTIP: self.tooltip_font
         }[style]
-        bitmap = font.render(text, True, self.theme["text"])
+        bitmap = font.render(text, True, self.theme[theme])
 
         rect = bitmap.get_rect()
 
