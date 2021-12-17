@@ -2,6 +2,7 @@ import sys
 import os
 import socket
 import time
+import random
 
 from enum import Enum
 from threading import Thread, Lock
@@ -31,7 +32,7 @@ THEMES = {
         "promotion": Color("#00d5ff"),
         "last_squares": Color("#fadf11"),
         "popup": Color("#c29f76"),
-        "advantage": Color("#76ff40"),
+        "advantage": Color("#59d12a"),
         "disadvantage": Color("#ff4d40")
     }
 }
@@ -87,6 +88,16 @@ class Game:
         self.moves = []
         self.captures = []
         self.promotions = []
+
+        # Menu tips.
+        self.tip = 0
+        self.tips = [
+            "Long-range pieces are very powerful in Fairy Chess",
+            "Use the Buffoon to create pressure in the center",
+        ]
+        random.shuffle(self.tips)
+        self.tips.insert(0, "Right-click any piece to see details about it")
+        self.last_tip = time.time()
 
         # Clock.
         self.white_time = TIME
@@ -253,6 +264,17 @@ class Game:
                 elif mode == Mode.JOIN:
                     self.state = State.JOINMENU
 
+        if self.tip is None or self.last_second - self.last_tip > 4:
+            self.tip = (self.tip + 1) % len(self.tips)
+            self.last_tip = self.last_second
+
+        self.text(f"Tip: {self.tips[self.tip]}.",
+            pos=(self.screen_rect.centerx, self.screen_rect.height - 20),
+            align=(0, 1),
+            style=TextStyle.TOOLTIP)
+
+        self.last_second = int(time.time())
+
     def hostmenu(self):
         self.text("Hosting game", style=TextStyle.TITLE)
         self.text(f"Your local IP is {self.local_ip}")
@@ -276,7 +298,8 @@ class Game:
                     self.peer_ip += value
 
         self.text("Joining game", style=TextStyle.TITLE)
-        self.text("Please enter the IP you want to connect with:")
+        self.text("Please enter the IP you want to connect with or")
+        self.text("simply click \"Connect\" to join a game hosted on this computer.")
         self.text(self.peer_ip)
         self.text("")
 
@@ -290,40 +313,18 @@ class Game:
         self.text(f"Connecting with {self.peer_ip} " + self.dots(), pos=self.screen_rect.center)
 
     def ingame(self):
+        now = time.time()
         if not self.board.finished and not self.paused:
             if self.turn == 1:
-                self.white_time -= (int(time.time() - self.last_second))
+                self.white_time -= (int(now - self.last_second))
             else:
-                self.black_time -= (int(time.time() - self.last_second))
+                self.black_time -= (int(now - self.last_second))
 
-        if self.last_second != int(time.time()):
-            self.last_second = int(time.time())
+        if self.last_second != int(now):
+            self.last_second = int(now)
             self.dirty = True
 
-        clock_rect1 = self.text(format_time(self.black_time if self.side != 2 else self.white_time), pos=(20, 20), align=(-1, -1))
-        clock_rect2 = self.text(format_time(self.white_time if self.side != 2 else self.black_time), pos=(20, self.screen_rect.height - 20), align=(-1, 1))
-
-        worth1 = 0
-        worth2 = 0
-        for sq in range(len(self.board.squares)):
-            piece = self.board.squares[sq]
-            if piece and piece.side == (1 if self.side == 2 else 2):
-                worth1 += self.worths[piece.kind.value]
-            if piece and piece.side == (2 if self.side == 2 else 1):
-                worth2 += self.worths[piece.kind.value]
-
-        if self.board_rect.left < clock_rect1.right:
-            self.text(f"[{worth1}]", pos=(self.screen_rect.w - 20, 20), align=(1, -1))
-            self.text(f"[{worth2}]", pos=(self.screen_rect.w - 20, clock_rect2.top), align=(1, -1))
-            diff = worth2 - worth1
-            self.text(f"{'+' if diff > 0 else ''}{'=' if diff == 0 else diff}", pos=(self.screen_rect.centerx, clock_rect2.top), align=(0, -1),
-                      theme="advantage" if diff > 0 else "disadvantage" if diff < 0 else "text")
-        else:
-            self.text(f"[{worth1}]", pos=(20, clock_rect1.bottom + 20), align=(-1, -1))
-            self.text(f"[{worth2}]", pos=(20, clock_rect2.top - 20), align=(-1, 1))
-            diff = worth2 - worth1
-            self.text(f"{'+' if diff > 0 else ''}{'=' if diff == 0 else diff}", pos=(20, self.screen_rect.centery), align=(-1, 0),
-                      theme="advantage" if diff > 0 else "disadvantage" if diff < 0 else "text")
+        self.infos()
 
         if not self.paused:
             self.mutex.acquire()
@@ -344,6 +345,35 @@ class Game:
 
             if self.mouseup() and not self.board_rect.collidepoint(*pygame.mouse.get_pos()):
                 self.dragged = None
+
+    def infos(self):
+        is_white = self.side is None or self.side == 1
+
+        clock_rect1 = self.text(format_time(self.black_time if is_white else self.white_time), pos=(20, 20), align=(-1, -1))
+        clock_rect2 = self.text(format_time(self.white_time if is_white else self.black_time), pos=(20, self.screen_rect.height - 20), align=(-1, 1))
+
+        my_worth = 0
+        their_worth = 0
+        for sq in range(len(self.board.squares)):
+            piece = self.board.squares[sq]
+            if piece and piece.side == (1 if is_white else 2):
+                my_worth += self.worths[piece.kind.value]
+            if piece and piece.side == (2 if is_white else 1):
+                their_worth += self.worths[piece.kind.value]
+
+        diff = my_worth - their_worth
+        diff_text = f"{'+' if diff > 0 else ''}{'=' if diff == 0 else diff}"
+        theme = "advantage" if diff > 0 else "disadvantage" if diff < 0 else "text"
+
+        if self.board_rect.left < clock_rect1.right:
+            self.text(f"[{their_worth}]", pos=(self.screen_rect.w - 20, 20), align=(1, -1))
+            self.text(f"[{my_worth}]", pos=(self.screen_rect.w - 20, clock_rect2.top), align=(1, -1))
+            self.text(diff_text, pos=(self.screen_rect.centerx, clock_rect2.top), align=(0, -1), theme=theme)
+        else:
+            self.text(f"[{their_worth}]", pos=(20, clock_rect1.bottom + 20), align=(-1, -1))
+            self.text(f"[{my_worth}]", pos=(20, clock_rect2.top - 20), align=(-1, 1))
+            diff = my_worth - their_worth
+            self.text(diff_text, pos=(20, self.screen_rect.centery), align=(-1, 0), theme=theme)
 
     def square(self, sq):
         x, y = to_coords(255 - sq if self.side == 2 else sq)
@@ -497,7 +527,7 @@ class Game:
         if self.peer_ip:
             print(f"Connecting to {self.peer_ip}")
             self.socket.connect((self.peer_ip, PORT))
-            self.side, = self.socket.recv(1)
+            self.side = self.socket.recv(1)[0]
         else:
             print(f"Listening for incoming connections")
             self.socket.bind((self.local_ip, PORT))
