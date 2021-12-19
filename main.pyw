@@ -92,11 +92,24 @@ class Game:
         # Menu tips.
         self.tip = 0
         self.tips = [
-            "Long-range pieces are very powerful in Fairy Chess",
-            "Use the Buffoon to create pressure in the center",
+            "Long-range pieces are very valuable due to the large board size.",
+            "Use the Buffoon to create pressure in the center.",
+            "The Centurion can capture Pawns en passant, but the Pawn not Centurions.",
+            "Pawns can always move two squares forward. Try to promote them to a Unicorn.",
+            "Ships promote to a Gryphon in your opponent's corners.",
+            "Sixty minutes seem like a lot of time, but there is much to think about.",
+            "The Bow, Cannon and Star can create tricky threats from the backrow.",
+            "The Rhinoceros is powerful, so make sure your opponent cannot trap it.",
+            "The Buffalo and the Lion are powerful defensive pieces.",
+            "The Diablo and the Dragonwoman are best suited for attacking.",
+            "There is no castling. Take some moves to see your king to safety.",
+            "Use lower valued pieces to gain tempo by attacking higher valued pieces.",
+            "Both the Unicorn and the Lion can single-handedly deliver checkmate.",
+            "Developing all your pieces can take many moves, but you should still do it.",
+            "Seemingly unguarded squares might be guarded by a bull or antelope."
         ]
         random.shuffle(self.tips)
-        self.tips.insert(0, "Right-click any piece to see details about it")
+        self.tips.insert(0, "Right-click any piece to see details about it.")
         self.last_tip = time.time()
 
         # Clock.
@@ -227,6 +240,9 @@ class Game:
         self.surface.fill(self.theme["background"])
         self.cursor = [self.screen_rect.centerx, self.screen_rect.height // 3]
 
+        if self.state in [State.HOSTMENU, State.JOINMENU] and self.event.type == pygame.KEYDOWN and self.event.key == pygame.K_ESCAPE:
+            os.execv(sys.executable, ["python"] + sys.argv)
+
         if self.state == State.MAINMENU:
             self.mainmenu()
 
@@ -264,11 +280,11 @@ class Game:
                 elif mode == Mode.JOIN:
                     self.state = State.JOINMENU
 
-        if self.tip is None or self.last_second - self.last_tip > 4:
+        if self.last_second - self.last_tip > 6:
             self.tip = (self.tip + 1) % len(self.tips)
             self.last_tip = self.last_second
 
-        self.text(f"Tip: {self.tips[self.tip]}.",
+        self.text(f"Tip:   {self.tips[self.tip]}",
             pos=(self.screen_rect.centerx, self.screen_rect.height - 20),
             align=(0, 1),
             style=TextStyle.TOOLTIP)
