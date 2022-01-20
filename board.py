@@ -35,6 +35,20 @@ class Board:
             kind_name, square = line.strip().split()
             self.create_piece(side, Kind[kind_name], int(square))
 
+    def write_file(self, filename):
+        side1 = []
+        side2 = []
+
+        for i, piece in enumerate(self.squares):
+            if piece is not None:
+                line = f"{piece.kind.value.upper()} {i}\n"
+                [side1, side2][piece.side - 1].append(line)
+
+        with open(filename, "w") as file:
+            file.writelines(side1)
+            file.write("\n")
+            file.writelines(side2)
+
     def printout(self):
         lines = []
         digits = len(str(self.size ** 2 - 1))

@@ -228,14 +228,22 @@ class Game:
     def refresh(self):
         if self.event.type == pygame.QUIT:
             sys.exit()
-        elif self.event.type == pygame.VIDEORESIZE:
+
+        if self.event.type == pygame.VIDEORESIZE:
             self.resize()
-        elif self.mousedown():
+
+        if self.mousedown():
             self.pressed = True
-        elif self.mouseup():
+
+        if self.mouseup():
             self.pressed = False
-        elif self.event.type == pygame.KEYDOWN and self.event.key == pygame.K_p and self.side in (None, self.turn):
-            self.pause()
+
+        if self.event.type == pygame.KEYDOWN and self.state == State.INGAME:
+            if self.event.key == pygame.K_p and self.side in (None, self.turn):
+                self.pause()
+
+            if self.event.key == pygame.K_s and pygame.key.get_mods() & pygame.KMOD_CTRL:
+                self.board.write_file("dump.pos")
 
         self.surface.fill(self.theme["background"])
         self.cursor = [self.screen_rect.centerx, self.screen_rect.height // 3]
