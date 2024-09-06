@@ -46,6 +46,7 @@ Ship
 9
 Can move one square diagonally and then up or down, away from its position,
 until a piece or the rim of the board stops it.
+A ship reaching a corner of the opponent's side is promoted to a gryphon.
 
 Buffoon
 6
