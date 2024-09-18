@@ -29,3 +29,17 @@ DIR_SOUTHEAST = (-BOARD_SIZE + 1, BOARD_SIZE - 1)
 DIRS_ROOK = [DIR_NORTH, DIR_SOUTH, DIR_EAST, DIR_WEST]
 DIRS_BISHOP = [DIR_NORTHWEST, DIR_SOUTHWEST, DIR_NORTHEAST, DIR_SOUTHEAST]
 DIRS_QUEEN = DIRS_ROOK + DIRS_BISHOP
+
+WORTHS = dict()
+with open("resources/tooltips.txt") as file:
+	content = [line[:-1] for line in file.readlines()]
+	i = 0
+	while i < len(content):
+		key = content[i]
+		worth = content[i+1]
+		WORTHS[key] = int(worth)
+
+		i += 2
+		while i < len(content) and content[i] != "":
+			i += 1
+		i += 1

@@ -1,26 +1,72 @@
 from pieces import *
 from util import *
 
-
 class Board:
     def __init__(self, turn=1):
         self.size = BOARD_SIZE
         self.squares = [None] * (self.size ** 2)
         self.turn = turn
-
-        self.en_passant = (-1, -1)
-        self.move_history = []
-        self.promoting = False
+        
         self.finished = False
+        self.en_passant = (-1, -1)  # This is a pair (sq1, sq2).
+                                    # The piece at sq2 can be taken en passant as though it only moved to sq1.
+        self.side_1_worth = 0
+        self.side_2_worth = 0
 
     def clear(self):
         self.squares = [None] * (self.size ** 2)
+        self.turn = 1
+        
         self.en_passant = (-1, -1)
-        self.move_history = []
-
+        self.finished = False
+        
+        self.side_1_worth = 0
+        self.side_2_worth = 0
+    
+    def remove_piece(self, sq):
+        piece = self.squares[sq]
+        if piece is not None:
+            if piece.side == 1:
+                self.side_1_worth -= WORTHS[piece.kind.value]
+            else:
+                self.side_2_worth -= WORTHS[piece.kind.value]
+            self.squares[sq] = None
+        
+    
     def create_piece(self, side, kind, square=0, xy=None):
-        piece = Piece(side, kind, square, xy)
-        self.squares[piece.square] = piece
+        sq = square if xy is None else to_square(xy)
+        self.remove_piece(sq)
+        
+        self.squares[sq] = Piece(side, kind, sq)
+        
+        if side == 1:
+            self.side_1_worth += WORTHS[kind.value]
+        else:
+            self.side_2_worth += WORTHS[kind.value]
+            
+    def place_piece(self, piece, square=0, xy=None):
+        sq = square if xy is None else to_square(xy)
+        self.remove_piece(sq)
+        
+        self.squares[sq] = piece
+        
+        if piece.side == 1:
+            self.side_1_worth += WORTHS[piece.kind.value]
+        else:
+            self.side_2_worth += WORTHS[piece.kind.value]
+            
+    def change_piece_kind(self, sq, new_kind):
+        piece = self.squares[sq]
+        if piece is None:
+            return
+        
+        if piece.side == 1:
+            self.side_1_worth += (WORTHS[new_kind.value] - WORTHS[piece.kind.value])
+        else:
+            self.side_2_worth += (WORTHS[new_kind.value] - WORTHS[piece.kind.value])
+            
+        piece.kind = new_kind
+        
 
     def setup_file(self, filename):
         with open(filename) as file:
@@ -48,6 +94,20 @@ class Board:
             file.writelines(side1)
             file.write("\n")
             file.writelines(side2)
+            
+    def make_copy(self):
+        new_board = Board()
+        
+        new_board.turn = self.turn
+        new_board.en_passant = self.en_passant
+        new_board.side_1_worth = self.side_1_worth
+        new_board.side_2_worth = self.side_2_worth
+        
+        for sq in range(self.size ** 2):
+            if self.squares[sq] is not None:
+                piece = self.squares[sq]
+                new_board.squares[sq] = Piece(piece.side, piece.kind, sq)
+        return new_board
 
     def printout(self):
         lines = []
@@ -124,54 +184,41 @@ class Board:
                 else:
                     break
         return move_squares, capture_squares
-
-    def possible_moves(self, square=0, xy=None, check_side=False):
-        if xy is not None:
-            square = to_square(xy)
-        piece = self.squares[square]
-        if piece is None:
-            return None
-        return piece.move_and_capture_squares(self, check_side=check_side)
-
-    def move(self, from_sq, to_sq):
-        mocap = "Move" if self.squares[to_sq] is None else "Capture"
-        moves = self.possible_moves(from_sq, check_side=True)
-        if moves is None:
-            return "Invalid", mocap
-        moves = moves[0] | moves[1]
+    
+    def move_raw(self, from_sq, to_sq, set_en_passant=True, promote_idx=0, switch_turn=True):
         piece = self.squares[from_sq]
-        if to_sq in moves:
-            if self.en_passant[0] >= 0:
-                if to_sq == self.en_passant[0] and piece.kind in [Kind.PAWN, Kind.CENTURION]:
-                    self.squares[self.en_passant[1]] = None
-                self.squares[self.en_passant[0]] = None
-            piece.move(to_sq)
-            self.squares[to_sq] = piece
-            self.squares[from_sq] = None
-            self.move_history.append((from_sq, to_sq))
+        
+        # REMOVE PIECE THAT IS TAKEN EN PASSANT
+        if self.en_passant[0] >= 0:
+            if to_sq == self.en_passant[0] and piece.kind in [Kind.PAWN, Kind.CENTURION]:
+                self.remove_piece(self.en_passant[1])
 
+        piece.move(to_sq)
+        self.place_piece(piece, to_sq)
+        self.remove_piece(from_sq)  
+            
+        if set_en_passant:
             passant = (from_sq + to_sq) // 2
             if piece.kind in [Kind.PAWN, Kind.CENTURION] and abs(from_sq - to_sq) == BOARD_SIZE * 2:
                 self.en_passant = (passant, to_sq)
             else:
                 self.en_passant = (-1, -1)
 
-            if to_sq in piece.promotion_squares():
-                options = piece.promotion_pieces()
-                if len(options) == 1:
-                    piece.kind = options[0]
-                else:
-                    self.promoting = True
-                    return options, mocap
+        if to_sq in piece.promotion_squares():
+            options = piece.promotion_pieces()
+            self.change_piece_kind(piece.square, options[promote_idx])
 
+        if switch_turn:
             self.turn = 3 - self.turn
-            mate = self.check_mate()
-            if mate == 1:
-                return "Stalemate", mocap
-            if mate == 2:
-                return "Checkmate", mocap
-            return "Valid", mocap
-        return "Invalid", mocap
+        
+    
+    def possible_moves(self, square=0, xy=None, check_side=False, no_en_passant=False):
+        if xy is not None:
+            square = to_square(xy)
+        piece = self.squares[square]
+        if piece is None:
+            return None
+        return piece.move_and_capture_squares(self, check_side=check_side, no_en_passant=no_en_passant)
 
     def in_check(self, side=0):
         if side == 0:
@@ -186,20 +233,17 @@ class Board:
                                 return True
         return False
 
-    def check_move_for_check(self, from_sq, to_sq):
-        piece, target = self.squares[from_sq], self.squares[to_sq]
-        piece.move(to_sq)
-        self.squares[to_sq] = piece
-        self.squares[from_sq] = None
-        if self.in_check(piece.side):
-            self.squares[from_sq], self.squares[to_sq] = piece, target
-            piece.move(from_sq)
+    def check_move_for_check(self, from_sq, to_sq):  # returns False if the move results in its side being in check.
+        piece = self.squares[from_sq]
+        if piece is None:
             return False
-        self.squares[from_sq], self.squares[to_sq] = piece, target
-        piece.move(from_sq)
-        return True
+        
+        test_board = self.make_copy()
+        test_board.move_raw(from_sq, to_sq)
+        
+        return not test_board.in_check(piece.side)
 
-    def check_mate(self, side=0):  # 0 = no mate, 1 = stalemate, 2 = checkmate
+    def check_mate(self, side=0):  # output: 0 = no mate, 1 = stalemate, 2 = checkmate
         if side == 0:
             side = self.turn
         for piece in self.squares:
@@ -211,17 +255,104 @@ class Board:
         if self.in_check(side):
             return 2
         return 1
+        
+    def get_worths(self):
+        return self.side_1_worth, self.side_2_worth
+        
+class DisplayedBoard(Board):
+    def __init__(self, turn=1):
+        Board.__init__(self, turn)
+           
+        self.highlighted_squares = tuple()
+        self.captured_kind = None
+        self.promoting = False
+        
+    def clear(self):
+        Board.clear(self)
+        
+        self.highlighted_squares = tuple()
+        self.captured_kind = None
+        self.promoting = False
+        
+    def move(self, from_sq, to_sq):
+        mocap = "Move" if self.squares[to_sq] is None else "Capture"
+        
+        # LIST ALL POSSIBLE MOVES FOR VERIFICATION
+        
+        moves = self.possible_moves(from_sq, check_side=True)
+        if moves is None:
+            return "Invalid", mocap
+                
+        moves = moves[0] | moves[1]
+        
+        if to_sq in moves:
+            
+            piece = self.squares[from_sq]
+            
+            self.highlighted_squares = (from_sq, to_sq)
+            self.captured_kind = None if mocap == "Move" else self.squares[to_sq].kind
+        
+            # REMOVE PIECE THAT IS TAKEN EN PASSANT
+            if self.en_passant[0] >= 0:
+                
+                if to_sq == self.en_passant[0] and piece.kind in [Kind.PAWN, Kind.CENTURION]:
+                    
+                    self.highlighted_squares = (*self.highlighted_squares, self.en_passant[1])
+                    self.captured_kind = self.squares[self.en_passant[1]].kind
+                    self.remove_piece(self.en_passant[1])
+                    mocap = "Capture"
 
-    def promote(self, square, kind):
-        piece = self.squares[square]
-        piece.kind = kind
+            piece.move(to_sq)
+            self.place_piece(piece, to_sq)
+            self.remove_piece(from_sq)  
+            
+            # SET NEW EN PASSANT SQUARE IF NECESSARY
+            passant = (from_sq + to_sq) // 2
+            if piece.kind in [Kind.PAWN, Kind.CENTURION] and abs(from_sq - to_sq) == BOARD_SIZE * 2:
+                self.en_passant = (passant, to_sq)
+            else:
+                self.en_passant = (-1, -1)
+
+            # PROMOTE PIECES
+            if to_sq in piece.promotion_squares():
+                options = piece.promotion_pieces()
+                if len(options) == 1:
+                    self.change_piece_kind(piece.square, options[0])
+                else:
+                    self.promoting = True
+                    return options, mocap
+
+            self.turn = 3 - self.turn
+            mate = self.check_mate()
+            
+            if mate == 1:
+                return "Stalemate", mocap
+            if mate == 2:
+                return "Checkmate", mocap
+                
+            return "Valid", mocap
+            
+        return "Invalid", mocap
+        
+    def promote(self, sq, kind):
+        piece = self.squares[sq]
+        if piece == None:
+            return "Invalid"
+        if sq not in piece.promotion_squares():
+            return "Invalid"
+        if kind not in piece.promotion_pieces():
+            return "Invalid"
+        
+        self.change_piece_kind(sq, kind)
+        
         self.turn = 3 - self.turn
         mate = self.check_mate()
-        self.promoting = False
+        
         if mate == 1:
             return "Stalemate"
         if mate == 2:
             return "Checkmate"
+            
         return "Valid"
 
 

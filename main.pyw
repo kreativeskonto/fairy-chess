@@ -13,9 +13,10 @@ os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 import pygame
 from pygame import Color, Rect
 
-from board import Board
+from board import DisplayedBoard
 from pieces import Kind, Piece
 from util import BOARD_SIZE, TIME, to_coords, format_time
+from ai import get_ai_move, get_ai_promotion
 
 PORT = 5398
 BLACK = Color(0, 0, 0)
@@ -44,11 +45,13 @@ class State(Enum):
     JOINMENU = 2
     CONNECTING = 3
     INGAME = 4
+    CONTROLS = 5
 
 class Mode(Enum):
     LOCAL = "Play locally"
     HOST = "Host network game"
     JOIN = "Join network game"
+    CONTROLS = "Show Controls"
 
 class TextStyle(Enum):
     TITLE = "Title"
@@ -68,12 +71,17 @@ class Game:
         self.size = BOARD_SIZE
         self.theme = THEMES["Chess.com"]
         self.padding = 20
-        self.board = Board()
+        self.board = DisplayedBoard()
         self.board.setup_file("resources/default_moab.pos")
         self.side = None
         self.turn = 1
         self.paused = False
         self.result = None
+        self.showing_captured_piece = False
+        
+        # Ai.
+        self.ai_plays_side_2 = False
+        self.ai_found_move = None
 
         # Window, event and drag state.
         pygame.display.set_caption("Fairy chess")
@@ -109,7 +117,6 @@ class Game:
             "Seemingly unguarded squares might be guarded by a bull or antelope."
         ]
         random.shuffle(self.tips)
-        self.tips.insert(0, "Right-click any piece to see details about it.")
         self.last_tip = time.time()
 
         # Clock.
@@ -125,14 +132,12 @@ class Game:
         # Tooltips.
         self.tooltip_piece = None
         self.tooltips = dict()
-        self.worths = dict()
         with open("resources/tooltips.txt") as file:
             content = [line[:-1] for line in file.readlines()]
         i = 0
         while i < len(content):
             key = content[i]
             worth = content[i+1]
-            self.worths[key] = int(worth)
             tooltip = [f"{key} ({worth})" if worth != "0" else key]
             i += 2
             while i < len(content) and content[i] != "":
@@ -239,17 +244,41 @@ class Game:
             self.pressed = False
 
         if self.event.type == pygame.KEYDOWN and self.state == State.INGAME:
+            # PRESS P TO PAUSE
             if self.event.key == pygame.K_p and self.side in (None, self.turn):
                 self.pause()
+            
+            # HOLD LEFT ARROW TO SEE THE PREVIOUS BOARD STATE
+            if self.event.key == pygame.K_LEFT and self.side in (None, self.turn):
+                self.showing_captured_piece = True
 
+            # PRESS CTRL+S TO SAVE THE BOARD STATE
             if self.event.key == pygame.K_s and pygame.key.get_mods() & pygame.KMOD_CTRL:
                 self.board.write_file("dump.pos")
+            
+            # PRESS A TO GIVE CONTROL OF THE BLACK PIECES TO THE AI
+            if self.event.key == pygame.K_a and self.side == None:
+                if self.turn == 1:
+                    self.ai_plays_side_2 = not self.ai_plays_side_2
+                elif not self.ai_plays_side_2:
+                    self.ai_plays_side_2 = True
+                    Thread(target=self.find_ai_reply, daemon=True).start()
+        
+        # STOP HOLDING LEFT ARROW TO NO LONGER SEE THE PREVIOUS BOARD STATE            
+        if self.event.type == pygame.KEYUP and self.state == State.INGAME:
+            if self.event.key == pygame.K_LEFT:
+                self.showing_captured_piece = False
 
         self.surface.fill(self.theme["background"])
         self.cursor = [self.screen_rect.centerx, self.screen_rect.height // 3]
 
-        if self.state in [State.HOSTMENU, State.JOINMENU] and self.event.type == pygame.KEYDOWN and self.event.key == pygame.K_ESCAPE:
-            os.execv(sys.executable, ["python"] + sys.argv)
+        # PRESS ESCAPE TO RETURN TO MAIN MENU
+        if self.event.type == pygame.KEYDOWN and self.event.key == pygame.K_ESCAPE:
+            if self.state in [State.HOSTMENU, State.JOINMENU]:
+                os.execv(sys.executable, ["python"] + sys.argv)
+            
+            elif self.state == State.CONTROLS:
+                self.state = State.MAINMENU
 
         if self.state == State.MAINMENU:
             self.mainmenu()
@@ -266,6 +295,9 @@ class Game:
 
         elif self.state == State.INGAME:
             self.ingame()
+            
+        elif self.state == State.CONTROLS:
+            self.controls()
 
         pygame.display.update()
 
@@ -287,6 +319,9 @@ class Game:
 
                 elif mode == Mode.JOIN:
                     self.state = State.JOINMENU
+                    
+                elif mode == Mode.CONTROLS:
+                    self.state = State.CONTROLS
 
         if self.last_second - self.last_tip > 6:
             self.tip = (self.tip + 1) % len(self.tips)
@@ -335,7 +370,16 @@ class Game:
 
     def connecting(self):
         self.text(f"Connecting with {self.peer_ip} " + self.dots(), pos=self.screen_rect.center)
-
+    
+    def controls(self):
+        self.text("Controls", style=TextStyle.TITLE)
+        self.text("Move pieces via drag & drop using the left mouse button.")
+        self.text("Inspect pieces by holding the right mouse button.")
+        self.text("Press P during your turn to pause the timers.")
+        self.text("Press A during local play to give control of the black pieces to the computer.")
+        self.text("Press CTRL+S to save the current position as a dump file.")
+        self.text("Press Esc to return to the main menu.")
+    
     def ingame(self):
         now = time.time()
         if not self.board.finished and not self.paused:
@@ -369,6 +413,13 @@ class Game:
 
             if self.mouseup() and not self.board_rect.collidepoint(*pygame.mouse.get_pos()):
                 self.dragged = None
+                
+        if self.ai_plays_side_2 and self.ai_found_move is not None:
+            from_sq, to_sq = self.ai_found_move
+            self.ai_found_move = None
+            feedback = self.board.move(from_sq, to_sq)
+            self.handle_feedback(feedback, from_sq, to_sq)
+            
 
     def infos(self):
         is_white = self.side is None or self.side == 1
@@ -376,25 +427,23 @@ class Game:
         clock_rect1 = self.text(format_time(self.black_time if is_white else self.white_time), pos=(20, 20), align=(-1, -1))
         clock_rect2 = self.text(format_time(self.white_time if is_white else self.black_time), pos=(20, self.screen_rect.height - 20), align=(-1, 1))
 
-        my_worth = 0
-        their_worth = 0
-        for sq in range(len(self.board.squares)):
-            piece = self.board.squares[sq]
-            if piece and piece.side == (1 if is_white else 2):
-                my_worth += self.worths[piece.kind.value]
-            if piece and piece.side == (2 if is_white else 1):
-                their_worth += self.worths[piece.kind.value]
+        side_1_worth, side_2_worth = self.board.get_worths()
+        if is_white:
+            my_worth, their_worth = side_1_worth, side_2_worth
+        else:
+            my_worth, their_worth = side_2_worth, side_1_worth
 
         diff = my_worth - their_worth
         diff_text = f"{'+' if diff > 0 else ''}{'=' if diff == 0 else diff}"
         theme = "advantage" if diff > 0 else "disadvantage" if diff < 0 else "text"
-
+        their_worth_theme = "disadvantage" if self.ai_plays_side_2 else "text"
+        
         if self.board_rect.left < clock_rect1.right:
-            self.text(f"[{their_worth}]", pos=(self.screen_rect.w - 20, 20), align=(1, -1))
+            self.text(f"[{their_worth}]", pos=(self.screen_rect.w - 20, 20), align=(1, -1), theme=their_worth_theme)
             self.text(f"[{my_worth}]", pos=(self.screen_rect.w - 20, clock_rect2.top), align=(1, -1))
             self.text(diff_text, pos=(self.screen_rect.centerx, clock_rect2.top), align=(0, -1), theme=theme)
         else:
-            self.text(f"[{their_worth}]", pos=(20, clock_rect1.bottom + 20), align=(-1, -1))
+            self.text(f"[{their_worth}]", pos=(20, clock_rect1.bottom + 20), align=(-1, -1), theme=their_worth_theme)
             self.text(f"[{my_worth}]", pos=(20, clock_rect2.top - 20), align=(-1, 1))
             diff = my_worth - their_worth
             self.text(diff_text, pos=(20, self.screen_rect.centery), align=(-1, 0), theme=theme)
@@ -406,7 +455,7 @@ class Game:
             key = "move"
         elif self.dragged and sq in self.captures:
             key = "capture"
-        elif self.board.move_history and sq in self.board.move_history[-1]:
+        elif sq in self.board.highlighted_squares:
             key = "last_squares"
         elif (x + y) % 2:
             key = "white"
@@ -427,7 +476,7 @@ class Game:
 
             if self.mousedown():
                 piece = self.board.squares[sq]
-                if piece and (self.side is None or piece.side == self.side):
+                if piece and ((self.side is None and not (piece.side == 2 and self.ai_plays_side_2)) or piece.side == self.side):
                     self.dragged = piece
                     self.moves, self.captures = piece.move_and_capture_squares(self.board, check_side=True)
                     self.promotions = piece.promotion_squares()
@@ -438,9 +487,20 @@ class Game:
                 self.handle_feedback(feedback, from_sq, sq)
                 self.dragged = None
 
-        piece = self.board.squares[sq]
-        if piece and piece != self.dragged:
-            self.piece(piece, square.topleft)
+        if key == "last_squares" and self.showing_captured_piece:
+                    
+            if sq == self.board.highlighted_squares[0]:
+                new_piece = Piece(3 - self.turn, self.board.squares[self.board.highlighted_squares[1]].kind, sq)
+                self.piece(new_piece, square.topleft)
+                
+            elif sq == self.board.highlighted_squares[-1]:
+                if self.board.captured_kind is not None:
+                    new_piece = Piece(self.turn, self.board.captured_kind, sq)
+                    self.piece(new_piece, square.topleft)
+        else:
+            piece = self.board.squares[sq]
+            if piece and piece != self.dragged:
+                self.piece(piece, square.topleft)
 
         if self.dragged and sq in self.promotions:
             temp = pygame.Surface(self.square_rect.size, pygame.SRCALPHA)
@@ -581,7 +641,7 @@ class Game:
         result, mocap = feedback
         if result == "Invalid":
             return
-
+        
         if result == "Stalemate":
             self.result = result + "."
 
@@ -595,15 +655,30 @@ class Game:
             self.capture_sound.play()
 
         if own and type(result) == list:
-            self.promoting = from_sq, to_sq, result
+            if self.side == None and self.turn == 2 and self.ai_plays_side_2:
+                self.find_ai_promotion(from_sq, to_sq, result)
+            else:
+                self.promoting = from_sq, to_sq, result
             return
 
         self.turn = 3 - self.turn
         self.promoting = None
+        self.showing_captured_piece = False
 
         if own and self.socket is not None:
             promotion = len(Kind) if promotion is None else list(Kind).index(promotion)
             self.socket.send(bytes([0, from_sq, to_sq, promotion]))
+            
+        if self.turn == 2 and self.ai_plays_side_2 and result == "Valid":
+            Thread(target=self.find_ai_reply, daemon=True).start()          
+            
+    def find_ai_reply(self):
+        self.ai_found_move = get_ai_move(self.board)
+    
+    def find_ai_promotion(self, from_sq, to_sq, kinds):
+        choice = get_ai_promotion(self.board, to_sq, kinds)
+        feedback = self.board.promote(to_sq, choice), None
+        self.handle_feedback(feedback, from_sq, to_sq, promotion=choice)
 
     def lookup_public_ip(self):
         self.public_ip = request.urlopen("https://api.ipify.org").read().decode()

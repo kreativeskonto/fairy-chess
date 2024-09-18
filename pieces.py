@@ -80,7 +80,7 @@ class Piece:
         self.square = square
         self.x, self.y = to_coords(square)
 
-    def move_and_capture_squares(self, board, check_check=True, check_side=False):
+    def move_and_capture_squares(self, board, check_check=True, check_side=False, no_en_passant=False):
         if check_side and self.side != board.turn:
             return set(), set()
 
@@ -160,9 +160,11 @@ class Piece:
             else:
                 move, _ = board.ray(self.side, self.square, [DIR_SOUTH], max_length=2)
                 en_pas, cap = board.ray(self.side, self.square, [DIR_SOUTHEAST, DIR_SOUTHWEST], max_length=1)
-            for sq in en_pas:
-                if sq == board.en_passant[0] and board.squares[board.en_passant[1]].kind == Kind.PAWN:
-                    cap.add(sq)
+                
+            if not no_en_passant:
+                for sq in en_pas:
+                    if sq == board.en_passant[0] and board.squares[board.en_passant[1]].kind == Kind.PAWN:
+                        cap.add(sq)
             moves, captures = move, cap
 
         elif self.kind == Kind.CENTURION:
@@ -172,11 +174,13 @@ class Piece:
             else:
                 move, _ = board.ray(self.side, self.square, [DIR_SOUTH], max_length=2)
                 en_pas, cap = board.ray(self.side, self.square, [DIR_SOUTHEAST, DIR_SOUTHWEST], max_length=1)
-            for sq in en_pas:
-                if sq == board.en_passant[0]:
-                    cap.add(sq)
-                else:
-                    move.add(sq)
+            
+            if not no_en_passant:
+                for sq in en_pas:
+                    if sq == board.en_passant[0]:
+                        cap.add(sq)
+                    else:
+                        move.add(sq)
             moves, captures = move, cap
 
         elif self.kind == Kind.SHIP:
@@ -220,3 +224,128 @@ class Piece:
                 valid_captures.add(to_sq)
 
         return valid_moves, valid_captures
+        
+    def defended_pieces(self, board, check_check=True):
+        other_side = 3 - self.side
+        
+        if self.kind == Kind.ROOK:
+            _, captures = board.ray(other_side, self.square, DIRS_ROOK)
+
+        elif self.kind == Kind.BISHOP:
+            _, captures = board.ray(other_side, self.square, DIRS_BISHOP)
+
+        elif self.kind == Kind.QUEEN:
+            _, captures = board.ray(other_side, self.square, DIRS_QUEEN)
+
+        elif self.kind == Kind.KING:
+            _, captures = board.ray(other_side, self.square, DIRS_QUEEN, max_length=1)
+
+        elif self.kind == Kind.BUFFOON:
+            _, captures = board.ray(other_side, self.square, DIRS_QUEEN, max_length=1)
+
+        elif self.kind == Kind.KNIGHT:
+            _, captures = board.knights_move(other_side, self.square)
+
+        elif self.kind == Kind.ELEPHANT:
+            _, cap1 = board.ray(other_side, self.square, DIRS_BISHOP, max_length=1)
+            _, cap2 = board.knights_move(other_side, self.square, ab=(2, 2))
+            captures = cap1 | cap2
+
+        elif self.kind == Kind.MACHINE:
+            _, cap1 = board.ray(other_side, self.square, DIRS_ROOK, max_length=1)
+            _, cap2 = board.knights_move(other_side, self.square, ab=(2, 0))
+            captures = cap1 | cap2
+
+        elif self.kind == Kind.CAMEL:
+            _, captures = board.knights_move(other_side, self.square, ab=(3, 1))
+
+        elif self.kind == Kind.DRAGONWOMAN:
+            _, cap1 = board.ray(other_side, self.square, DIRS_ROOK)
+            _, cap2 = board.knights_move(other_side, self.square)
+            captures = cap1 | cap2
+
+        elif self.kind == Kind.DIABLO:
+            _, cap1 = board.ray(other_side, self.square, DIRS_BISHOP)
+            _, cap2 = board.knights_move(other_side, self.square)
+            captures = cap1 | cap2
+
+        elif self.kind == Kind.UNICORN:
+            _, cap1 = board.ray(other_side, self.square, DIRS_QUEEN)
+            _, cap2 = board.knights_move(other_side, self.square)
+            captures = cap1 | cap2
+
+        elif self.kind == Kind.BULL:
+            _, captures = board.knights_move(other_side, self.square, ab=(3, 2))
+
+        elif self.kind == Kind.ANTELOPE:
+            _, cap1 = board.knights_move(other_side, self.square, ab=(2, 2))
+            _, cap2 = board.knights_move(other_side, self.square, ab=(3, 3))
+            _, cap3 = board.knights_move(other_side, self.square, ab=(2, 0))
+            _, cap4 = board.knights_move(other_side, self.square, ab=(3, 0))
+            captures = cap1 | cap2 | cap3 | cap4
+
+        elif self.kind == Kind.BUFFALO:
+            _, cap1 = board.knights_move(other_side, self.square)
+            _, cap2 = board.knights_move(other_side, self.square, ab=(3, 1))
+            _, cap3 = board.knights_move(other_side, self.square, ab=(3, 2))
+            captures = cap1 | cap2 | cap3
+
+        elif self.kind == Kind.LION:
+            _, cap1 = board.ray(other_side, self.square, DIRS_QUEEN, max_length=1)
+            _, cap2 = board.knights_move(other_side, self.square, ab=(2, 0))
+            _, cap3 = board.knights_move(other_side, self.square)
+            _, cap4 = board.knights_move(other_side, self.square, ab=(2, 2))
+            captures = cap1 | cap2 | cap3 | cap4
+
+        elif self.kind == Kind.PAWN:
+            if self.side == 1:
+                _, cap = board.ray(other_side, self.square, [DIR_NORTHEAST, DIR_NORTHWEST], max_length=1)
+            else:
+                _, cap = board.ray(other_side, self.square, [DIR_SOUTHEAST, DIR_SOUTHWEST], max_length=1)
+            captures = cap
+
+        elif self.kind == Kind.CENTURION:
+            if self.side == 1:
+                _, cap = board.ray(other_side, self.square, [DIR_NORTHEAST, DIR_NORTHWEST], max_length=1)
+            else:
+                _, cap = board.ray(other_side, self.square, [DIR_SOUTHEAST, DIR_SOUTHWEST], max_length=1)
+            captures = cap
+
+        elif self.kind == Kind.SHIP:
+            _, cap1 = board.ray(other_side, to_square((self.x - 1, self.y)), [DIR_NORTH, DIR_SOUTH]) if self.x > 0 else (set(), set())
+            _, cap2 = board.ray(other_side, to_square((self.x + 1, self.y)), [DIR_NORTH, DIR_SOUTH]) if self.x < board.size - 1 else (set(), set())
+            captures = cap1 | cap2
+
+        elif self.kind == Kind.RHINOCEROS:
+            _, cap1 = board.ray(other_side, to_square((self.x - 1, self.y)), [DIR_NORTHWEST, DIR_SOUTHWEST]) if self.x > 0 else (set(), set())
+            _, cap2 = board.ray(other_side, to_square((self.x + 1, self.y)), [DIR_NORTHEAST, DIR_SOUTHEAST]) if self.x < board.size - 1 else (set(), set())
+            _, cap3 = board.ray(other_side, to_square((self.x, self.y - 1)), [DIR_SOUTHWEST, DIR_SOUTHEAST]) if self.y > 0 else (set(), set())
+            _, cap4 = board.ray(other_side, to_square((self.x, self.y + 1)), [DIR_NORTHWEST, DIR_NORTHEAST]) if self.y < board.size - 1 else (set(), set())
+            captures = cap1 | cap2 | cap3 | cap4
+
+        elif self.kind == Kind.GRYPHON:
+            _, cap1 = board.ray(other_side, to_square((self.x - 1, self.y)), [DIR_NORTH, DIR_SOUTH]) if self.x > 0 else (set(), set())
+            _, cap2 = board.ray(other_side, to_square((self.x + 1, self.y)), [DIR_NORTH, DIR_SOUTH]) if self.x < board.size - 1 else (set(), set())
+            _, cap3 = board.ray(other_side, to_square((self.x, self.y - 1)), [DIR_WEST, DIR_EAST]) if self.y > 0 else (set(), set())
+            _, cap4 = board.ray(other_side, to_square((self.x, self.y + 1)), [DIR_WEST, DIR_EAST]) if self.y < board.size - 1 else (set(), set())
+            captures = cap1 | cap2 | cap3 | cap4
+
+        elif self.kind == Kind.CANNON:
+            _, captures = board.artillery(other_side, self.square, DIRS_ROOK)
+
+        elif self.kind == Kind.BOW:
+            _, captures = board.artillery(other_side, self.square, DIRS_BISHOP)
+
+        else:  # self.kind == PIECE_STAR
+            _, captures = board.artillery(other_side, self.square, DIRS_QUEEN)
+
+        if not check_check:
+            return captures
+
+        valid_captures = set()
+
+        for to_sq in captures:
+            if board.check_move_for_check(self.square, to_sq):
+                valid_captures.add(to_sq)
+
+        return valid_captures
