@@ -6,8 +6,8 @@ from random import choice as random_pick
 MEMORY_FILE_NAME = "ai_memory.board"
 DEPTH = 3  # THIS SHOULD BE AN ODD NUMBER
 
-SPACE_VALUE = 1/32
-PROMOTION_VALUE = 4
+SPACE_VALUE = 1/128
+PROMOTION_VALUE = 5
 
 class Reversal():
 	def __init__(self, board, squares):
@@ -150,17 +150,18 @@ class AiMemoryBoard(Board):
 		Outputs a tuple of numbers (a, b, c).
 		a = Checkmate.
 		b = Value of pieces.
-		c = Value of enemy undefended pieces.
-		d = Nearness of promoting pieces to their promotion squares.
-		e = Scope.
+		c = Attacks on enemy pieces.
+		d = Negative value of undefended pieces.
+		e = Nearness of promoting pieces to their promotion squares.
+		f = Scope.
 		"""
 		
 		# CHECKMATE ECLIPSES ALL
 		if self.check_mate():
 			if self.turn == 1:
-				return (-1, 0, 0, 0, 0)
+				return (-1, 0, 0, 0, 0, 0)
 			else:
-				return (1, 0, 0, 0, 0)
+				return (1, 0, 0, 0, 0, 0)
 				
 		turn_player_pieces = self.side_1_pieces if self.turn == 1 else self.side_2_pieces
 		other_player_pieces = self.side_2_pieces if self.turn == 1 else self.side_1_pieces
@@ -189,6 +190,7 @@ class AiMemoryBoard(Board):
 		score_c = 0
 		score_d = 0
 		score_e = 0
+		score_f = 0
 		
 		# HANDLE TURN PLAYER UNDEFENDED PIECES
 		turn_player_weaknesses = []
@@ -236,11 +238,13 @@ class AiMemoryBoard(Board):
 		
 		# UPDATE_SCORE
 		if self.turn == 1:
-			score_b += sum(other_player_weaknesses) - sum(turn_player_weaknesses)
-			score_c += sum(other_player_undefended)
+			score_b += sum(other_player_weaknesses)
+			score_c -= sum(turn_player_weaknesses)
+			score_d += sum(other_player_undefended)
 		else:
-			score_b -= sum(other_player_weaknesses) - sum(turn_player_weaknesses)
-			score_c -= sum(other_player_undefended)
+			score_b -= sum(other_player_weaknesses)
+			score_c += sum(turn_player_weaknesses)
+			score_d -= sum(other_player_undefended)
 		
 		# ADD NEARNESS OF PIECES TO THEIR PROMOTION SQUARES
 		for sq in self.side_1_pieces | self.side_2_pieces:
@@ -248,30 +252,32 @@ class AiMemoryBoard(Board):
 			
 			if piece.kind in [Kind.PAWN, Kind.CENTURION]:
 				if piece.side == 1:
-					score_d += 2**-(BOARD_SIZE - 1 - piece.y)
+					score_e += 2**-(BOARD_SIZE - 1 - piece.y)
 				else:
-					score_d -= 2**-piece.y
+					score_e -= 2**-piece.y
 
 			elif piece.kind == Kind.BUFFOON:
 				if piece.side == 1:
-					score_d += 2**-abs((BOARD_SIZE // 2) - piece.y)
+					score_e += 2**-abs((BOARD_SIZE // 2) - piece.y)
 				else:
-					score_d -= 2**-abs(piece.y - (BOARD_SIZE // 2 - 1))
+					score_e -= 2**-abs(piece.y - (BOARD_SIZE // 2 - 1))
 
 			elif piece.kind == Kind.SHIP:
 				if piece.side == 1:
-					score_d += 2**-min(abs(piece.x - 1), abs(piece.x - (BOARD_SIZE - 1)))
+					score_e += 2**-min(abs(piece.x - 1), abs(piece.x - (BOARD_SIZE - 2)))
 				else:
-					score_d -= 2**-min(abs(piece.x - 1), abs(piece.x - (BOARD_SIZE - 1)))
+					score_e -= 2**-min(abs(piece.x - 1), abs(piece.x - (BOARD_SIZE - 2)))
 		
 		# ADD SCORE FOR SPACE
 		for sq in self.side_1_pieces:
-			score_e += len(possible_moves[sq])
+			if self.squares[sq].kind not in (Kind.BOW, Kind.CANNON, Kind.STAR, Kind.KING):
+				score_f += len(possible_moves[sq])
 			
 		for sq in self.side_2_pieces:
-			score_e -= len(possible_moves[sq])
+			if self.squares[sq].kind not in (Kind.BOW, Kind.CANNON, Kind.STAR, Kind.KING):
+				score_f -= len(possible_moves[sq])
 			
-		return (0, score_b, score_c, score_d, score_e)
+		return (0, score_b, score_c, score_d, score_e, score_f)
 		
 	def find_best_move(self):
 		all_moves = set()
@@ -308,8 +314,8 @@ class AiMemoryBoard(Board):
 		return best_move
 
 def score_sort_key(score):
-	a, b, c, d, e = score
-	return (a, b, c + PROMOTION_VALUE * d + SPACE_VALUE * e)
+	a, b, c, d, e, f = score
+	return (a, b, c, d + PROMOTION_VALUE * e + SPACE_VALUE * f)
 
 def get_ai_move(board):
 	turn = board.turn

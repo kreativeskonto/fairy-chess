@@ -375,6 +375,7 @@ class Game:
         self.text("Controls", style=TextStyle.TITLE)
         self.text("Move pieces via drag & drop using the left mouse button.")
         self.text("Inspect pieces by holding the right mouse button.")
+        self.text("Hold the left arrow key to see the state of the board before the most recent move.")
         self.text("Press P during your turn to pause the timers.")
         self.text("Press A during local play to give control of the black pieces to the computer.")
         self.text("Press CTRL+S to save the current position as a dump file.")
