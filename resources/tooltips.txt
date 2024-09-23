@@ -20,16 +20,16 @@ Can move to the opposite corner of a 2x3 or 3x2 rectangle, jumping over any piec
 This way, the knight always changes the color of the square it stands on when moving.
 
 Bishop
-7
+8
 Can move in any diagonal direction until a piece or the rim of the board stops it.
 This way, the bishop never leaves the color of the square it stands on.
 
 Rook
-10
+11
 Can move in any orthogonal direction until a piece or the rim of the board stops it.
 
 Queen
-20
+21
 Can move in any direction until a piece or the rim of the board stops it.
 The queen combines the powers of the rook and the bishop.
 
@@ -43,7 +43,7 @@ Machine
 Can move one or two squares orthogonally. When moving two squares, it may jump to reach its destination.
 
 Ship
-9
+10
 Can move one square diagonally and then up or down, away from its position,
 until a piece or the rim of the board stops it.
 A ship reaching a corner of the opponent's side is promoted to a gryphon.
@@ -64,7 +64,7 @@ This special capture can only be done during the first turn it is possible.
 A centurion reaching the last row of the board is promoted to your choice of a queen, lion or gryphon.
 
 Lion
-14
+15
 Can jump to any square within a 5x5 region centered on it.
 The lion combines the powers of the elephant, machine and knight.
 
@@ -93,7 +93,7 @@ Can jump to the opposite corner of a 3x4 or 4x3 rectangle, jumping over any piec
 This way, the bull always changes the color of the square it stands on when moving.
 
 Cannon
-12
+11
 Can move orthogonally like a rook without capturing.
 To capture an enemy piece, the cannon also moves orthogonally but has to jump over exactly one piece.
 
@@ -108,12 +108,12 @@ Jumps like a knight and then moves diagonally away until a piece or the rim of t
 This way, the rhinoceros always changes the color of the square it stands on when moving.
 
 Star
-22
+21
 Can move in any direction without capturing, like a queen.
 To capture an enemy piece, the star also moves like a queen but has to jump over exactly one piece.
 
 Unicorn
-22
+24
 Can move in any direction like a queen or to the opposite corner of a 2x3 or 3x2 rectangle like a knight.
 
 Dragonwoman
